@@ -14,7 +14,29 @@ Requirements:
 
 import sys
 import os
+import argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Parse args early to set logging level
+parser = argparse.ArgumentParser(description="PhysicAI Warehouse Simulation")
+parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose debug output")
+parser.add_argument("--steps", type=int, default=300, help="Number of simulation steps")
+parser.add_argument("--resolution", type=str, default="720p", 
+                    choices=["480p", "720p", "1080p"],
+                    help="Video recording resolution (default: 720p)")
+parser.add_argument("--vla", type=str, default="cogact",
+                    choices=["cogact", "cogact_server", "openvla", "profiled"],
+                    help="VLA model to use (default: cogact)")
+parser.add_argument("--instruction", type=str, default="pick up the box and move it forward",
+                    help="Task instruction for VLA (default: pick up the box)")
+args = parser.parse_args()
+
+# Resolution presets
+RESOLUTIONS = {
+    "480p": (854, 480),
+    "720p": (1280, 720),
+    "1080p": (1920, 1080)
+}
 
 # Initialize CUDA BEFORE any TDW imports to prevent Unity from blocking GPU access
 import torch
@@ -27,7 +49,8 @@ else:
     print("WARNING: CUDA not available - VLA will run on CPU (very slow)")
 
 import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+log_level = logging.DEBUG if args.verbose else logging.INFO
+logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 from simulator.core import Simulator, SimulatorConfig
 
@@ -42,7 +65,7 @@ def run_simulation():
     config = SimulatorConfig(
         n_robots=3,
         
-        vla_model="openvla",
+        vla_model=args.vla,
         vla_latency_budget_ms=100.0,
         vla_quantization="none",  # Use FP16 - A6000 has plenty of VRAM
         
@@ -50,24 +73,32 @@ def run_simulation():
         gossip_period_ms=50.0,
         enable_lf_coordination=True,
         
-        max_steps=300,
+        max_steps=args.steps,
         profiling_enabled=True,
         
         # Enable video recording (set to True to record)
         enable_recording=True,
         recording_path="recordings/warehouse_sim",
+        recording_resolution=RESOLUTIONS[args.resolution],
         
-        # Demo: move forward and throttle inference
-        demo_instruction="Move forward",
-        inference_interval=10
+        # Demo instruction - CogACT is trained on manipulation tasks
+        # Good prompts: "pick up the object", "move to the target", "push the box"
+        demo_instruction=args.instruction,
+        inference_interval=5,
+        
+        # Verbose mode
+        verbose=args.verbose
     )
     
     print(f"\nConfiguration:")
     print(f"  Robots: {config.n_robots}")
     print(f"  VLA Model: {config.vla_model} ({config.vla_quantization})")
+    print(f"  Instruction: \"{config.demo_instruction}\"")
     print(f"  VLA Latency Budget: {config.vla_latency_budget_ms}ms")
     print(f"  DSM Gossip Period: {config.gossip_period_ms}ms")
     print(f"  Video Recording: {'ON' if config.enable_recording else 'OFF'}")
+    if config.enable_recording:
+        print(f"  Resolution: {config.recording_resolution[0]}x{config.recording_resolution[1]} ({args.resolution})")
     
     sim = Simulator(config)
     
@@ -78,10 +109,41 @@ def run_simulation():
         print("  pip install tdw magnebot transformers torch bitsandbytes")
         return
     
+    # Add objects to the scene for more interesting tasks
+    print("\nSpawning objects in warehouse...")
+    objects = [
+        ("box_1", "box", (0.0, 0.5, 0.0)),      # Center
+        ("box_2", "box", (2.0, 0.5, 2.0)),      # Near robot_1
+        ("box_3", "box", (-2.0, 0.5, -2.0)),    # Near robot_0
+        ("crate_1", "crate", (4.0, 0.5, 0.0)),  # East
+        ("crate_2", "crate", (-4.0, 0.5, 0.0)), # West
+        ("bin_1", "bin", (0.0, 0.5, 4.0)),      # North
+    ]
+    for obj_id, obj_type, pos in objects:
+        try:
+            sim._backend.spawn_object(obj_id, obj_type, pos)
+        except Exception as e:
+            print(f"  Warning: Could not spawn {obj_id}: {e}")
+    
+    # Track initial positions for movement detection (capture NOW before sim starts)
+    initial_positions = {}
+    for rid, robot in sim.robots.items():
+        initial_positions[rid] = robot._position
+    
     def progress_callback(state):
         if state.step_count % 100 == 0:
             rtf = state.sim_time / max(state.real_time, 0.001)
             print(f"  Step {state.step_count}: sim={state.sim_time:.2f}s, RTF={rtf:.2f}x")
+            
+            # In verbose mode, show position changes
+            if args.verbose:
+                for rid, robot in sim.robots.items():
+                    pos = robot._position
+                    init = initial_positions[rid]
+                    dx = pos[0] - init[0]
+                    dz = pos[2] - init[2]
+                    dist = (dx**2 + dz**2) ** 0.5
+                    print(f"    {rid}: pos=({pos[0]:.2f}, {pos[2]:.2f}) moved={dist:.3f}m from start")
     
     print("\nRunning simulation...")
     sim.run(callback=progress_callback)

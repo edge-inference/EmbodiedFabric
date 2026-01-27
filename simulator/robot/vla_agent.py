@@ -61,25 +61,34 @@ class VLAAgent(RobotAgent):
     
     def step(self, coordinator, dsm, profiler) -> None:
         """
-        Execute one VLA-driven step.
+        Execute one VLA-driven step (single-robot inference).
         
         Only runs VLA inference when robot is idle (no pending action).
         """
+        bundle = self.build_vla_observation(coordinator, dsm)
+        if bundle is None:
+            return
+        backend_obs, vla_obs = bundle
+        
+        action = self._vla.predict(vla_obs)
+        self._last_action = action
+        
+        self.apply_vla_action(action, backend_obs, vla_obs, profiler, dsm)
+
+    def build_vla_observation(self, coordinator, dsm):
+        """Build VLA observation for batching or single inference."""
         self._metrics['total_steps'] += 1
         self._step_counter += 1
         
         # Check if robot is busy with a previous action
         if self._waiting_for_action:
             if hasattr(self._backend, 'is_robot_idle') and not self._backend.is_robot_idle(self.robot_id):
-                # Still executing previous action, skip this step
-                return
-            else:
-                # Action complete
-                self._waiting_for_action = False
+                return None
+            self._waiting_for_action = False
         
         # Throttle VLA inference for performance
         if (self._step_counter % self._inference_interval) != 0:
-            return
+            return None
         
         # Get observation from TDW
         try:
@@ -87,7 +96,7 @@ class VLAAgent(RobotAgent):
             self._position = backend_obs.position
         except Exception as e:
             logger.warning(f"Failed to get observation for {self.robot_id}: {e}")
-            return
+            return None
         
         # Build context from DSM and coordinator
         context = self._build_context(coordinator, dsm)
@@ -105,11 +114,10 @@ class VLAAgent(RobotAgent):
             context=context,
             history=self._observation_history[-self._max_history:]
         )
-        
-        # Run VLA inference
-        action = self._vla.predict(vla_obs)
-        self._last_action = action
-        
+        return backend_obs, vla_obs
+
+    def apply_vla_action(self, action, backend_obs, vla_obs, profiler, dsm) -> None:
+        """Apply a VLA action and record metrics."""
         # Record VLA metrics
         vla_metrics = self._vla.get_metrics()
         if profiler:
@@ -118,8 +126,6 @@ class VLAAgent(RobotAgent):
                 flops=vla_metrics.flops,
                 duration_ms=vla_metrics.latency_ms
             )
-            
-            # Check timing contract
             if vla_metrics.latency_ms > self._vla_latency_budget_ms:
                 profiler.record_contract_violation(
                     contract="vla_timing",
@@ -127,11 +133,20 @@ class VLAAgent(RobotAgent):
                     budget=self._vla_latency_budget_ms
                 )
         
+        # Log VLA action prediction (DEBUG level for verbose mode)
+        logger.debug(
+            f"[{self.robot_id}] VLA ACTION: "
+            f"base_vel=({action.base_velocity[0]:.3f}, {action.base_velocity[1]:.3f}) "
+            f"gripper={action.gripper_action:.2f} "
+            f"done={action.done} "
+            f"pos=({backend_obs.position[0]:.2f}, {backend_obs.position[2]:.2f})"
+        )
+        
         # Convert VLA action to robot command
         command = RobotCommand(
             robot_id=self.robot_id,
             linear_velocity=(action.base_velocity[0], 0.0, action.base_velocity[1]),
-            angular_velocity=(0.0, 0.0, action.base_velocity[1] * 0.5),  # Turn based on lateral velocity
+            angular_velocity=(0.0, 0.0, action.base_velocity[1] * 0.5),
             gripper_action=action.gripper_action,
             arm_target=action.arm_action
         )
@@ -139,6 +154,7 @@ class VLAAgent(RobotAgent):
         # Send command (non-blocking)
         if self._backend.send_command(command):
             self._waiting_for_action = True
+            logger.debug(f"[{self.robot_id}] Command sent, waiting for action to complete")
         
         # Update DSM with current state
         if dsm:
@@ -149,10 +165,8 @@ class VLAAgent(RobotAgent):
                 task_id=self._current_task.get('id') if self._current_task else None
             )
         
-        # Update internal state
+        # Update internal state and history
         self._update_state(action)
-        
-        # Maintain observation history
         self._observation_history.append(vla_obs)
         if len(self._observation_history) > self._max_history * 2:
             self._observation_history = self._observation_history[-self._max_history:]

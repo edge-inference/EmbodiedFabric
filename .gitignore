@@ -20,3 +20,10 @@ backup/
 .cursorrules
 testbed.txt
 *.pdf
+
+# Environment files (may contain secrets)
+.env
+*.env.local
+
+# Docker volumes
+.docker/

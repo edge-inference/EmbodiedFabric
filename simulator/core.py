@@ -45,6 +45,10 @@ class SimulatorConfig:
     # Video recording
     enable_recording: bool = False                # Record video of simulation
     recording_path: str = "recordings"            # Path to save recordings
+    recording_resolution: tuple = (1280, 720)     # Video resolution (width, height)
+    
+    # Debug
+    verbose: bool = False                         # Enable verbose debug output
 
 
 @dataclass
@@ -174,12 +178,34 @@ class Simulator:
         
         self._coordinator.step()
         
-        for robot in self._robots.values():
-            robot.step(
-                coordinator=self._coordinator,
-                dsm=self._dsm,
-                profiler=self._profiler
-            )
+        # Batch inference path for CogACT (local or server)
+        if self.config.vla_model in ("cogact", "cogact_server"):
+            batch_obs = []
+            batch_agents = []
+            for robot in self._robots.values():
+                bundle = robot.build_vla_observation(self._coordinator, self._dsm)
+                if bundle is None:
+                    continue
+                backend_obs, vla_obs = bundle
+                batch_obs.append(vla_obs)
+                batch_agents.append((robot, backend_obs, vla_obs))
+            
+            if batch_obs:
+                vla_model = batch_agents[0][0]._vla
+                if hasattr(vla_model, "predict_batch"):
+                    actions = vla_model.predict_batch(batch_obs)
+                else:
+                    actions = [vla_model.predict(obs) for obs in batch_obs]
+                
+                for (robot, backend_obs, vla_obs), action in zip(batch_agents, actions):
+                    robot.apply_vla_action(action, backend_obs, vla_obs, self._profiler, self._dsm)
+        else:
+            for robot in self._robots.values():
+                robot.step(
+                    coordinator=self._coordinator,
+                    dsm=self._dsm,
+                    profiler=self._profiler
+                )
         
         if self._dsm:
             self._dsm.gossip_round(list(self._robots.values()))
@@ -212,6 +238,14 @@ class Simulator:
                 rtf = self.state.sim_time / max(self.state.real_time, 0.001)
                 logger.info(f"Step {step}: sim_time={self.state.sim_time:.2f}s, "
                            f"RTF={rtf:.2f}x")
+            
+            # Verbose: log robot positions every 50 steps
+            if self.config.verbose and step % 50 == 0:
+                positions = []
+                for rid, robot in self._robots.items():
+                    pos = robot._position
+                    positions.append(f"{rid}=({pos[0]:.2f},{pos[2]:.2f})")
+                logger.debug(f"[Step {step}] Positions: {', '.join(positions)}")
         
         if self._profiler:
             self._profiler.stop_recording()

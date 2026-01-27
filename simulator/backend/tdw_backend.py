@@ -143,19 +143,31 @@ class TDWBackend(PhysicsBackend):
             self._recording_path = os.path.join(self._recording_path, f"run_{run_id}")
             os.makedirs(self._recording_path, exist_ok=True)
             
+            # Get resolution from config (default 1280x720)
+            width, height = getattr(self.config, 'recording_resolution', (1280, 720))
+            
+            # Set render quality for better visuals
+            self._controller.communicate([
+                {"$type": "set_screen_size", "width": width, "height": height},
+                {"$type": "set_render_quality", "render_quality": 5}  # Max quality
+            ])
+            
             # Add overhead camera for scene view
             self._third_person_camera = ThirdPersonCamera(
-                position={"x": 0, "y": 15, "z": 0},  # Overhead view
+                position={"x": 0, "y": 18, "z": 0},  # Overhead view (slightly higher)
                 look_at={"x": 0, "y": 0, "z": 0},
-                avatar_id="overhead_cam"
+                avatar_id="overhead_cam",
+                field_of_view=60  # Wider FOV to see more of the scene
             )
             
-            # Capture images from the camera
+            # Capture images from the camera at full resolution
             self._image_capture = ImageCapture(
                 avatar_ids=["overhead_cam"],
                 path=self._recording_path,
                 png=True
             )
+            
+            logger.info(f"Recording at {width}x{height} resolution")
             
             self._controller.add_ons.extend([self._third_person_camera, self._image_capture])
             self._controller.communicate([])  # Initialize add-ons
@@ -377,11 +389,18 @@ class TDWBackend(PhysicsBackend):
         
         try:
             # Movement command
-            if command.linear_velocity[0] != 0.0:
-                distance = command.linear_velocity[0] * 0.5  # Move 0.5m per command
-                magnebot.move_by(distance=distance, arrived_at=0.1)
+            vx, _, vz = command.linear_velocity
+            if vx != 0.0 or vz != 0.0:
+                # Map velocity-like action to visible movement distance.
+                # VLA outputs ~0.1-0.2, scale up for 20x20m room visibility
+                magnitude = float(np.hypot(vx, vz))
+                distance = magnitude * 5.0  # 5m scale factor for visibility
+                if vx < 0:
+                    distance = -distance
+                magnebot.move_by(distance=distance, arrived_at=0.3)
                 state.pending_action = True
                 state.action_type = f"move_by({distance:.2f})"
+                logger.debug(f"[{command.robot_id}] MOVE: vx={vx:.3f} vz={vz:.3f} -> distance={distance:.3f}m")
                 return True
             
             # Rotation command
@@ -390,6 +409,7 @@ class TDWBackend(PhysicsBackend):
                 magnebot.turn_by(angle=angle)
                 state.pending_action = True
                 state.action_type = f"turn_by({angle:.1f})"
+                logger.debug(f"[{command.robot_id}] TURN: angle={angle:.1f}deg")
                 return True
             
             # Gripper command
@@ -402,6 +422,7 @@ class TDWBackend(PhysicsBackend):
                         magnebot.grasp(target=command.arm_target, arm=Arm.right)
                         state.pending_action = True
                         state.action_type = f"grasp({command.arm_target})"
+                        logger.debug(f"[{command.robot_id}] GRASP: target={command.arm_target}")
                 else:
                     # Drop - only if holding something
                     held_right = magnebot.dynamic.held.get(Arm.right, [])
@@ -411,8 +432,10 @@ class TDWBackend(PhysicsBackend):
                         magnebot.drop(target=target_obj, arm=Arm.right)
                         state.pending_action = True
                         state.action_type = f"drop({target_obj})"
+                        logger.debug(f"[{command.robot_id}] DROP: target={target_obj}")
                 return True
             
+            logger.debug(f"[{command.robot_id}] NO-OP: zero velocity command")
             return True  # No-op command
             
         except Exception as e:

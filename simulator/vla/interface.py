@@ -115,6 +115,13 @@ def _cache_key(model_name: str, kwargs: Dict[str, Any]) -> str:
         latency = kwargs.get("latency_budget_ms", 100.0)
         device = kwargs.get("device", "cuda")
         return f"{model_name}|{quant}|{latency}|{device}"
+    if model_name == "cogact":
+        model_id = kwargs.get("model_id", "CogACT/CogACT-Small")
+        action_model_type = kwargs.get("action_model_type", "DiT-S")
+        return f"{model_name}|{model_id}|{action_model_type}"
+    if model_name == "cogact_server":
+        url = kwargs.get("url", "http://127.0.0.1:5500/act_batch")
+        return f"{model_name}|{url}"
     return f"{model_name}|default"
 
 
@@ -127,6 +134,16 @@ def create_vla(model_name: str, **kwargs) -> VLAInterface:
     if model_name == "openvla":
         from .openvla import OpenVLAModel
         _VLA_CACHE[key] = OpenVLAModel(**kwargs)
+    elif model_name == "cogact":
+        from .cogact import CogACTVLA
+        # Drop unsupported kwargs from generic VLAAgent
+        kwargs.pop("quantization", None)
+        _VLA_CACHE[key] = CogACTVLA(**kwargs)
+    elif model_name == "cogact_server":
+        from .cogact_server import CogACTServerClient
+        # Drop unsupported kwargs from generic VLAAgent
+        kwargs.pop("quantization", None)
+        _VLA_CACHE[key] = CogACTServerClient(**kwargs)
     elif model_name == "trt_openvla":
         from .trt_openvla import TRTOpenVLAClient
         _VLA_CACHE[key] = TRTOpenVLAClient(**kwargs)
