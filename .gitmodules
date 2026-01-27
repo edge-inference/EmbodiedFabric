@@ -1,0 +1,3 @@
+[submodule "extern/CogACT"]
+	path = extern/CogACT
+	url = https://github.com/microsoft/CogACT.git
