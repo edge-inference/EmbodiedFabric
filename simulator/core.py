@@ -20,9 +20,11 @@ class SimulatorConfig:
     n_robots: int = 5
     
     scene_id: str = "warehouse_default"
-    scene_size: tuple = (20, 20)                  # meters
+    scene_name: Optional[str] = None              
+    scene_size: tuple = (20, 20)                  
+    floorplan_layout: Optional[int] = None
     
-    vla_model: str = "openvla"                    # "openvla" or "profiled"
+    vla_model: str = "openvla"                    # "vla" or "profiled"
     vla_latency_budget_ms: float = 100.0          # Realistic budget for 7B model
     vla_quantization: str = "4bit"                # For BlockDialect R3
     

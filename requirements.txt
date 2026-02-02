@@ -1,0 +1,38 @@
+# PhysicAI Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core
+numpy>=1.24.0
+pillow>=10.0.0
+requests>=2.31.0
+json-numpy>=1.0.1
+
+# PyTorch (CUDA 12.1)
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch>=2.2.0
+torchvision>=0.17.0
+
+# TDW Simulation
+tdw>=1.13.0
+magnebot>=2.2.0
+
+# VLA Models (for local inference, not needed if using cogact_server)
+transformers>=4.40.0
+accelerate>=0.25.0
+huggingface_hub>=0.20.0
+bitsandbytes>=0.42.0
+
+# CogACT dependencies (if running locally)
+einops
+peft>=0.11.0
+sentencepiece>=0.1.99
+timm>=0.9.10
+tokenizers>=0.19.0
+
+# NoMaD Navigation dependencies
+efficientnet-pytorch
+diffusers>=0.11.1
+vit-pytorch
+positional-encodings[pytorch]
+opencv-python>=4.6.0
+lmdb

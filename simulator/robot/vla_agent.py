@@ -1,8 +1,7 @@
 """
 VLA-Driven Robot Agent
 
-Full robot with VLA inference for decision making.
-This is the only robot type - no simplified/mock versions.
+robot with VLA inference for decision making.
 """
 
 from typing import Dict, Any, Optional, Tuple
@@ -24,12 +23,11 @@ class VLAAgent(RobotAgent):
     1. Check if robot is idle (previous action complete)
     2. Get sensor observation from TDW physics backend
     3. Build VLA input (vision + language + DSM context)
-    4. Run VLA inference (OpenVLA)
+    4. Run VLA inference
     5. Execute predicted action (non-blocking)
     6. Update DSM with new state
     
-    Note: Magnebot actions are non-blocking. We only run VLA
-    inference when the robot is idle.
+    Magnebot actions are non-blocking. 
     """
     
     def __init__(self,
@@ -86,7 +84,7 @@ class VLAAgent(RobotAgent):
                 return None
             self._waiting_for_action = False
         
-        # Throttle VLA inference for performance
+        # Throttle VLA inference
         if (self._step_counter % self._inference_interval) != 0:
             return None
         
@@ -133,7 +131,7 @@ class VLAAgent(RobotAgent):
                     budget=self._vla_latency_budget_ms
                 )
         
-        # Log VLA action prediction (DEBUG level for verbose mode)
+        # Log VLA action prediction (DEBUG purpo)
         logger.debug(
             f"[{self.robot_id}] VLA ACTION: "
             f"base_vel=({action.base_velocity[0]:.3f}, {action.base_velocity[1]:.3f}) "

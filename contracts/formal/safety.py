@@ -35,9 +35,7 @@ class HazardSeverity(Enum):
 class Invariant:
     """
     Safety invariant: a property that must always hold.
-    
-    Invariants are stronger than guarantees - they must hold
-    regardless of assumptions (fail-safe behavior).
+
     """
     name: str
     expression: str

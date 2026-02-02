@@ -42,11 +42,11 @@ def patch_tdw_json_serialization():
     print("   [Patched JSON encoder for numpy types]")
 
 
-# Apply patch before importing TDW
+# Apply patch
 patch_tdw_json_serialization()
 
 def test_magnebot_basic(enable_recording=False):
-    """Basic Magnebot test without full simulator"""
+    """Basic Magnebot test"""
     print("=" * 60)
     print("TDW + Magnebot Integration Test")
     print("=" * 60)
@@ -98,7 +98,7 @@ def test_magnebot_basic(enable_recording=False):
         c.communicate({"$type": "terminate"})
         return False
     
-    # Setup recording if enabled
+    # Setup recording
     if enable_recording:
         print("\n2b. Setting up video recording...")
         try:
@@ -108,10 +108,9 @@ def test_magnebot_basic(enable_recording=False):
             
             os.makedirs(recording_path, exist_ok=True)
             
-            # Better camera angle to see the robot clearly
             camera = ThirdPersonCamera(
-                position={"x": -3, "y": 4, "z": -3},  # Side view, elevated
-                look_at={"x": 0, "y": 0.5, "z": 0.5},  # Look at robot center
+                position={"x": -3, "y": 4, "z": -3},
+                look_at={"x": 0, "y": 0.5, "z": 0.5},
                 avatar_id="overhead"
             )
             capture = ImageCapture(
@@ -121,7 +120,7 @@ def test_magnebot_basic(enable_recording=False):
             )
             c.add_ons.extend([camera, capture])
             
-            # Higher resolution and quality
+            # Higher resolution
             c.communicate([
                 {"$type": "set_render_quality", "render_quality": 5},
                 {"$type": "set_screen_size", "width": 1280, "height": 720}
@@ -171,7 +170,6 @@ def test_magnebot_basic(enable_recording=False):
     
     print("\n5. Testing image capture...")
     try:
-        # Trigger another communicate to get fresh images
         c.communicate([])
         
         images = magnebot.dynamic.images
@@ -181,11 +179,9 @@ def test_magnebot_basic(enable_recording=False):
             img = images["_img"]
             print(f"   RGB image shape: {img.shape if hasattr(img, 'shape') else 'N/A'}")
         
-        # Try PIL images
         pil_images = magnebot.dynamic.get_pil_images()
         print(f"   PIL image keys: {list(pil_images.keys())}")
         
-        # Try depth
         try:
             depth = magnebot.dynamic.get_depth_values()
             print(f"   Depth shape: {depth.shape}")
@@ -206,7 +202,7 @@ def test_magnebot_basic(enable_recording=False):
     
     print("\n7. Cleanup...")
     
-    # Compile video if recording was enabled
+    # Compile video
     if enable_recording:
         print("   Compiling video...")
         try:
@@ -214,7 +210,6 @@ def test_magnebot_basic(enable_recording=False):
             video_path = f"{recording_path}/test_video.mp4"
             frames_pattern = f"{recording_path}/overhead/img_%04d.png"
             
-            # Try both .png and .jpg patterns
             import glob
             jpg_frames = glob.glob(f"{recording_path}/overhead/img_*.jpg")
             png_frames = glob.glob(f"{recording_path}/overhead/img_*.png")
@@ -295,7 +290,7 @@ def test_multi_robot(enable_recording=False):
         TDWUtils.create_empty_room(20, 20)
     ])
     
-    # Setup recording if enabled
+    # Setup recording
     if enable_recording:
         print("   Setting up video recording...")
         try:
@@ -305,14 +300,12 @@ def test_multi_robot(enable_recording=False):
             
             os.makedirs(recording_path, exist_ok=True)
             
-            # Better camera: higher up, angled view to see all 3 robots
             camera = ThirdPersonCamera(
-                position={"x": 0, "y": 12, "z": -8},  # Higher and further back
-                look_at={"x": 0, "y": 0, "z": 2},      # Look at center of action
+                position={"x": 0, "y": 12, "z": -8},
+                look_at={"x": 0, "y": 0, "z": 2},
                 avatar_id="overhead"
             )
             
-            # Higher resolution capture
             capture = ImageCapture(
                 avatar_ids=["overhead"],
                 path=recording_path,
@@ -321,7 +314,6 @@ def test_multi_robot(enable_recording=False):
             
             c.add_ons.extend([camera, capture])
             
-            # Set higher render quality
             c.communicate([
                 {"$type": "set_render_quality", "render_quality": 5},
                 {"$type": "set_screen_size", "width": 1280, "height": 720}
@@ -356,7 +348,6 @@ def test_multi_robot(enable_recording=False):
     for robot in robots:
         robot.move_by(distance=2.0)
     
-    # Step until all actions complete
     steps = 0
     max_steps = 300
     while steps < max_steps:
@@ -370,7 +361,7 @@ def test_multi_robot(enable_recording=False):
     for i, robot in enumerate(robots):
         print(f"   Robot {i}: {robot.dynamic.transform.position} ({robot.action.status})")
     
-    # Compile video if recording
+    # Compile video
     if enable_recording:
         print("\n3. Compiling video...")
         try:
@@ -378,7 +369,6 @@ def test_multi_robot(enable_recording=False):
             import glob
             video_path = f"{recording_path}/multi_robot.mp4"
             
-            # Try both .png and .jpg patterns
             jpg_frames = glob.glob(f"{recording_path}/overhead/img_*.jpg")
             png_frames = glob.glob(f"{recording_path}/overhead/img_*.png")
             
@@ -393,7 +383,7 @@ def test_multi_robot(enable_recording=False):
                 "-i", frames_pattern,
                 "-c:v", "libx264",
                 "-pix_fmt", "yuv420p",
-                "-crf", "18",  # Better quality (lower = better)
+                "-crf", "18",
                 video_path
             ]
             result = subprocess.run(cmd, capture_output=True, text=True)

@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""
-Example: Formal Contract-Based System Design
-
-Demonstrates the formal A/G contract approach for:
-1. Defining component contracts with assumptions and guarantees
-2. Composing contracts to verify system-level properties
-3. Checking traces against contracts
-4. Mapping to hardware requirements through verified contracts
-
-This is how NVIDIA/DeepMind/serious CPS projects approach simulator design.
-"""
+"""Formal contract-based system design examples."""
 
 import sys
 import os
@@ -29,7 +19,6 @@ from contracts.formal.composition import (
 
 
 def example_1_basic_contracts():
-    """Example 1: Define basic A/G contracts"""
     print("=" * 60)
     print("Example 1: Basic Assume-Guarantee Contracts")
     print("=" * 60)
@@ -79,10 +68,10 @@ def example_1_basic_contracts():
          'detection_confidence': 0.9, 'perception_latency_ms': 30},
         
         {'camera_status': 'OPERATIONAL', 'ambient_light_lux': 100, 'camera_fps': 30,
-         'detection_confidence': 0.7, 'perception_latency_ms': 30},  # Violation!
+         'detection_confidence': 0.7, 'perception_latency_ms': 30},
         
         {'camera_status': 'DEGRADED', 'ambient_light_lux': 20, 'camera_fps': 15,
-         'detection_confidence': 0.5, 'perception_latency_ms': 100},  # Assumption violated
+         'detection_confidence': 0.5, 'perception_latency_ms': 100},
     ]
     
     result = perception_contract.check_satisfaction(trace)
@@ -95,7 +84,6 @@ def example_1_basic_contracts():
 
 
 def example_2_timing_contracts():
-    """Example 2: Timing contracts for real-time systems"""
     print("\n" + "=" * 60)
     print("Example 2: Timing Contracts")
     print("=" * 60)
@@ -144,7 +132,6 @@ def example_2_timing_contracts():
 
 
 def example_3_safety_contracts():
-    """Example 3: Safety contracts with invariants"""
     print("\n" + "=" * 60)
     print("Example 3: Safety Contracts (ISO 15066 compliant)")
     print("=" * 60)
@@ -176,7 +163,6 @@ def example_3_safety_contracts():
 
 
 def example_4_component_composition():
-    """Example 4: Component composition with contract verification"""
     print("\n" + "=" * 60)
     print("Example 4: Component Composition")
     print("=" * 60)
@@ -234,52 +220,18 @@ def example_4_component_composition():
 
 
 def example_5_hardware_mapping():
-    """Example 5: Mapping contracts to hardware requirements"""
     print("\n" + "=" * 60)
     print("Example 5: Contract-to-Hardware Mapping")
     print("=" * 60)
     
-    print("""
-    Contract-Based Hardware Sizing:
-    
-    1. TIMING CONTRACTS -> Compute Requirements
-       - Perception latency <= 10ms @ 30fps
-         -> Need: 30 GFLOPS for CNN inference
-         -> Platform: Jetson Orin Nano (20 TOPS NPU)
-       
-    2. TIMING CONTRACTS -> Communication Requirements  
-       - Gossip convergence <= 30ms for 3 hops
-         -> Need: WiFi 6 with < 5ms per-hop latency
-         -> Protocol: ROS2 DDS with QoS deadline policy
-       
-    3. SAFETY CONTRACTS -> Sensor Requirements
-       - Collision avoidance at 1m/s with 100ms reaction
-         -> Need: Depth sensor with 30Hz, < 15ms latency
-         -> Range: 0.3m - 10m for stopping distance
-       
-    4. BEHAVIORAL CONTRACTS -> Software Architecture
-       - Detection confidence >= 0.8
-         -> Need: Pre-trained model with mAP >= 0.85
-         -> Fallback: Conservative speed reduction if degraded
-    
-    This is how R3 (Hardware-Software Co-Design) connects to simulation!
-    """)
-    
-    print("Contract Refinement Chain:")
-    print("  System Contract")
-    print("    ├── Perception Contract (A: camera, G: detection)")
-    print("    │     └── Camera HW Spec: 640x480 @ 30Hz, < 10ms")
-    print("    │     └── Compute Spec: 30 GFLOPS, 4GB RAM")
-    print("    ├── Control Contract (A: sensing, G: actuation)")  
-    print("    │     └── IMU Spec: 200Hz, < 1ms")
-    print("    │     └── Motor Driver: 20Hz control loop")
-    print("    └── Communication Contract (A: network, G: convergence)")
-    print("          └── WiFi 6: 100Mbps, < 5ms latency")
-    print("          └── Protocol: LF (control) + DDS (data)")
+    print("Contract-Based Hardware Sizing:")
+    print("  Timing -> compute/latency budgets")
+    print("  Communication -> network latency budgets")
+    print("  Safety -> sensor range/latency requirements")
+    print("  Behavior -> model accuracy and fallback policy")
 
 
 def main():
-    """Run all examples"""
     example_1_basic_contracts()
     example_2_timing_contracts()
     example_3_safety_contracts()
@@ -289,24 +241,8 @@ def main():
     print("\n" + "=" * 60)
     print("Summary: Formal Contracts vs Software Interfaces")
     print("=" * 60)
-    print("""
-    SOFTWARE INTERFACES:
-    - Python ABCs with type hints
-    - Useful for: Code modularity, IDE support
-    - Cannot verify: Timing, safety, behavioral correctness
-    
-    FORMAL CONTRACTS:
-    - Assume-Guarantee specifications
-    - Timing contracts with bounds
-    - Safety contracts with invariants (SIL levels)
-    - Composable with verification
-    - Useful for: Hardware sizing, safety certification, 
-                  simulation validation, system integration
-    
-    Formal contracts for specification/verification
-    - For R3 (hardware co-design): Formal contracts are essential
-    - For safety-critical: Required by ISO 26262, DO-178C, etc.
-    """)
+    print("SOFTWARE INTERFACES: type hints, API boundaries")
+    print("FORMAL CONTRACTS: assumptions/guarantees, timing, safety")
 
 
 if __name__ == "__main__":

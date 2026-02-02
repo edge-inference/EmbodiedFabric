@@ -1,4 +1,4 @@
-# PhysicAI: Distributed Computing for Collaborative Robotics
+# PhysicAI:
 
 Simulation framework for hardware-software co-design of embodied AI systems.
 
@@ -16,27 +16,24 @@ physicai/
 │   ├── formal/               # Assume-Guarantee contracts
 │   │   ├── contract.py       # Base contract definitions
 │   │   ├── timing.py         # Real-time timing contracts
-│   │   ├── safety.py         # Safety contracts (ISO 15066)
+│   │   ├── safety.py         # Safety contracts
 │   │   ├── component.py      # Component specifications
 │   │   └── composition.py    # Contract composition rules
 │   └── ...
 │
-├── simulator/                 # Unified realistic simulator
+├── simulator/                 # Unified simulator
 │   ├── core.py               # Main simulator orchestration
 │   │
 │   ├── backend/              # Physics engines
 │   │   ├── base.py           # Backend interface
 │   │   ├── tdw_backend.py    # TDW (ThreeDWorld) integration
-│   │   └── mock_backend.py   # Mock for testing
 │   │
 │   ├── robot/                # Robot implementations
 │   │   ├── base.py           # Robot interface
 │   │   ├── vla_agent.py      # VLA-driven robot (full pipeline)
-│   │   └── kinematic_agent.py # Simplified robot (for scaling)
 │   │
 │   ├── vla/                  # Vision-Language-Action models
 │   │   ├── interface.py      # VLA contract
-│   │   ├── mock_vla.py       # Fast mock for testing
 │   │   └── profiled_vla.py   # Profiling wrapper
 │   │
 │   ├── coordination/         # Multi-robot coordination (from R1)
@@ -50,19 +47,19 @@ physicai/
 │   └── profiler.py           # Workload metrics collection
 │
 └── examples/                  # Usage examples
-    └── warehouse_scenario.py  # Full demo
+    └── floorplan_4zone.py  # demo
 ```
 
 ## Quick Start
 
 ```bash
-# Run with mock backend (no dependencies)
-cd physicai
-python examples/warehouse_scenario.py
-
 # Run with TDW (requires install)
 pip install tdw magnebot
 # Then change backend="tdw" in config
+
+cd physicai
+CUDA_VISIBLE_DEVICES=1 xvfb-run -a python examples/floorplan_4zone.py --robots 4
+
 ```
 
 ## Key Concepts
@@ -86,15 +83,15 @@ robot.execute(action)
 Contracts specify requirements that flow to hardware:
 
 ```python
-# Timing contract
+# Example Timing contract
 TimingContract.control_loop_contract(
     sensing_latency_ms=15.0,
     computation_latency_ms=25.0,  # VLA inference budget
     actuation_latency_ms=10.0,
     loop_period_ms=50.0           # 20Hz control
 )
-# → NPU must do VLA inference in 25ms
-# → Need 40 TOPS for 10B param model at 4-bit
+# → NPU must do VLA inference in (time)
+# → Need (#) FLOPS for (#) param model at 4-bit
 ```
 
 ### 3. DSM Coordination (R1)
@@ -132,21 +129,20 @@ recommendations = profiler.get_hardware_recommendations()
 
 | Mode | Physics Robots | Use Case |
 |------|---------------|----------|
-| FULL_PHYSICS | All | Accurate workload profiling (5-10 robots) |
-| HYBRID | Few | Coordination testing (10-100 robots) |
-| KINEMATIC_ONLY | None | Large fleet coordination (100+ robots) |
+| FULL_PHYSICS | All | workload profiling (5-10 robots) |
 
 ## Hardware Output (R3)
 
 Simulation produces specifications for μAgent SoC:
 
+Example
 ```
 Compute:
-  NPU: 40 TOPS (VLA inference in 25ms)
+  NPU: 5 TOPS (VLA inference in 25ms)
   Memory: 8GB LPDDR5 (5GB weights + buffers)
 
 Sensors:
-  Camera: 640x480 @ 30Hz, < 10ms latency
+  Camera: 640x480 @ 30Hz, < x latency
   Depth: 640x480 @ 30Hz
 
 Communication:
@@ -154,8 +150,8 @@ Communication:
   Gossip: 50 Kbps per robot pair
 
 Power:
-  Compute: 15W TDP
-  Total robot: 50W
+  Compute: xW TDP
+  Total robot: xW
 ```
 
 ## References
@@ -163,4 +159,5 @@ Power:
 - [ThreeDWorld (TDW)](https://threedworld.org/) - Physics simulation
 - [Lingua Franca](https://www.lf-lang.org/) - Deterministic coordination
 - [CHASE](https://github.com/chase-cps/core-library) - Contract-based CPS design
-- [OpenVLA](https://openvla.github.io/) - Open-source VLA model
+- [CogACT](https://github.com/microsoft/CogACT) - DiT-based manipulation policy (action chunking)
+- [NoMaD / ViNT](https://github.com/robodhruv/visualnav-transformer) - Diffusion-based navigation policy

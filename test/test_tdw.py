@@ -5,7 +5,7 @@ TDW Installation Test
 From: https://github.com/threedworld-mit/tdw/blob/master/Documentation/lessons/setup/pc.md
 
 This will:
-1. Download TDW build (~2GB on first run)
+1. Download TDW build 
 2. Launch windowed Unity application
 3. Create a room with an object
 4. Capture an image
@@ -25,11 +25,11 @@ camera = ThirdPersonCamera(
 )
 
 path = EXAMPLE_CONTROLLER_OUTPUT_PATH.joinpath("image_capture")
-print(f"Images will be saved to: {path}")
+print(f"Images saved to: {path}")
 
 capture = ImageCapture(avatar_ids=["a"], path=path)
 
-print("Starting TDW controller (may download build on first run)...")
+print("Starting TDW controller ...")
 c = Controller()
 c.add_ons.extend([camera, capture])
 

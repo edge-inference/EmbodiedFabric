@@ -44,7 +44,7 @@ def main():
         )
         obs_list.append(obs)
 
-    # Force load so we can report device placement
+    # Force load TO report device placement
     if hasattr(model, "load"):
         model.load()
 

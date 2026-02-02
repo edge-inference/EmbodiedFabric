@@ -2,7 +2,6 @@
 VLA Interface
 
 Abstract interface for Vision-Language-Action models.
-This is the core AI component that turns sensor input + language into robot actions.
 """
 
 from abc import ABC, abstractmethod
@@ -122,6 +121,12 @@ def _cache_key(model_name: str, kwargs: Dict[str, Any]) -> str:
     if model_name == "cogact_server":
         url = kwargs.get("url", "http://127.0.0.1:5500/act_batch")
         return f"{model_name}|{url}"
+    if model_name == "nomad":
+        device = kwargs.get("device", "cuda:0")
+        return f"{model_name}|{device}"
+    if model_name == "hierarchical":
+        device = kwargs.get("device", "cuda:0")
+        return f"{model_name}|{device}"
     return f"{model_name}|default"
 
 
@@ -150,7 +155,19 @@ def create_vla(model_name: str, **kwargs) -> VLAInterface:
     elif model_name == "profiled":
         from .profiled_vla import ProfiledVLA
         _VLA_CACHE[key] = ProfiledVLA(**kwargs)
+    elif model_name == "nomad":
+        from .nomad import NoMaDNavigator
+        kwargs.pop("quantization", None)
+        _VLA_CACHE[key] = NoMaDNavigator(**kwargs)
+    elif model_name == "nomad_mock":
+        from .nomad import MockNoMaDNavigator
+        _VLA_CACHE[key] = MockNoMaDNavigator(**kwargs)
+    elif model_name == "hierarchical":
+        from .hierarchical import HierarchicalPlanner
+        kwargs.pop("quantization", None)
+        _VLA_CACHE[key] = HierarchicalPlanner(**kwargs)
     else:
-        raise ValueError(f"Unknown VLA model: {model_name}. Use 'openvla' or 'profiled'")
+        raise ValueError(f"Unknown VLA model: {model_name}. "
+                        f"Options: openvla, cogact, cogact_server, nomad, hierarchical, profiled")
     
     return _VLA_CACHE[key]

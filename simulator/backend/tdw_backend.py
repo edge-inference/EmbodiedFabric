@@ -1,18 +1,8 @@
 """
-TDW (ThreeDWorld) Backend
+TDW Backend
 
-High-fidelity physics simulation using MIT's ThreeDWorld.
+Physics simulation via ThreeDWorld + Magnebot.
 https://threedworld.org/
-
-Features:
-- Rigid body physics
-- Photorealistic rendering
-- Sensor simulation (RGB, depth)
-- Robot articulation (Magnebot)
-
-Usage:
-    Magnebot is added as a TDW add-on. Actions are non-blocking;
-    you must call step() until the action completes.
 """
 
 from typing import Dict, Optional, Tuple, Any
@@ -27,12 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def _patch_json_for_numpy():
-    """
-    Patch JSON encoder to handle numpy types.
-    
-    Magnebot uses numpy float32/int32 internally, but TDW 1.13.0
-    can't serialize them. This patches json.JSONEncoder globally.
-    """
+    """Patch JSON encoder for numpy types (TDW 1.13 compat)."""
     _original_default = json.JSONEncoder.default
     
     def _patched_default(self, obj):
@@ -60,12 +45,7 @@ class RobotState:
 
 
 class TDWBackend(PhysicsBackend):
-    """
-    TDW physics backend with proper Magnebot integration.
-    
-    Magnebot is used as a TDW add-on for multi-robot support.
-    Actions are non-blocking - step() advances until actions complete.
-    """
+    """TDW physics backend with Magnebot."""
     
     def __init__(self, config, enable_recording: bool = False, recording_path: str = None):
         self.config = config
@@ -82,6 +62,7 @@ class TDWBackend(PhysicsBackend):
         self._third_person_camera = None
         self._image_capture = None
         self._frame_count = 0
+        self._capture_interval = 10  # Only capture every N steps
     
     def initialize(self) -> bool:
         """Initialize TDW controller and scene"""
@@ -92,15 +73,38 @@ class TDWBackend(PhysicsBackend):
             logger.info("Starting TDW controller...")
             self._controller = Controller(launch_build=True)
             
-            # Create warehouse-like room
-            commands = [
-                {"$type": "load_scene", "scene_name": "ProcGenScene"},
-                TDWUtils.create_empty_room(
-                    width=int(self.config.scene_size[0]),
-                    length=int(self.config.scene_size[1])
-                ),
-                {"$type": "set_time_step", "time_step": self.config.time_step}
-            ]
+            self._controller.communicate([
+                {"$type": "set_target_framerate", "framerate": -1}
+            ])
+            
+            scene_name = getattr(self.config, 'scene_name', None)
+            floorplan_layout = getattr(self.config, "floorplan_layout", None)
+            
+            if scene_name and str(scene_name).startswith("floorplan") and floorplan_layout is not None:
+                from tdw.add_ons.floorplan import Floorplan
+                floorplan = Floorplan()
+                floorplan.init_scene(scene=str(scene_name), layout=int(floorplan_layout))
+                self._controller.add_ons.append(floorplan)
+                commands = [
+                    {"$type": "set_time_step", "time_step": self.config.time_step},
+                    {"$type": "set_floorplan_roof", "show": False}
+                ]
+            elif scene_name:
+                logger.info(f"Loading pre-built scene: {scene_name}")
+                commands = [
+                    self._controller.get_add_scene(scene_name=scene_name),
+                    {"$type": "set_time_step", "time_step": self.config.time_step}
+                ]
+                if str(scene_name).startswith("floorplan"):
+                    commands.append({"$type": "set_floorplan_roof", "show": False})
+            else:
+                w = int(self.config.scene_size[0])
+                h = int(self.config.scene_size[1])
+                commands = [
+                    {"$type": "load_scene", "scene_name": "ProcGenScene"},
+                    TDWUtils.create_empty_room(width=w, length=h),
+                    {"$type": "set_time_step", "time_step": self.config.time_step}
+                ]
             
             self._controller.communicate(commands)
             
@@ -127,7 +131,7 @@ class TDWBackend(PhysicsBackend):
             from tdw.add_ons.image_capture import ImageCapture
             import os
             
-            # Create a numbered run directory to avoid mixing recordings
+            # Create a numbered run directory
             def _next_run_id(base_dir: str) -> int:
                 try:
                     existing = [
@@ -146,25 +150,34 @@ class TDWBackend(PhysicsBackend):
             # Get resolution from config (default 1280x720)
             width, height = getattr(self.config, 'recording_resolution', (1280, 720))
             
-            # Set render quality for better visuals
             self._controller.communicate([
                 {"$type": "set_screen_size", "width": width, "height": height},
-                {"$type": "set_render_quality", "render_quality": 5}  # Max quality
+                {"$type": "set_render_quality", "render_quality": 2},
+                {"$type": "set_post_process", "value": False},
+                {"$type": "set_shadow_strength", "strength": 0.5}
             ])
             
-            # Add overhead camera for scene view
+            scene_name = getattr(self.config, "scene_name", "") or ""
+            if scene_name.startswith("floorplan"):
+                camera_pos = {"x": 0, "y": 22, "z": 0}
+                camera_look = {"x": 0, "y": 0, "z": 0}
+                fov = 70
+            else:
+                camera_pos = {"x": 0, "y": 35, "z": -25}
+                camera_look = {"x": 0, "y": 1.5, "z": 0}
+                fov = 60
+
             self._third_person_camera = ThirdPersonCamera(
-                position={"x": 0, "y": 18, "z": 0},  # Overhead view (slightly higher)
-                look_at={"x": 0, "y": 0, "z": 0},
+                position=camera_pos,
+                look_at=camera_look,
                 avatar_id="overhead_cam",
-                field_of_view=60  # Wider FOV to see more of the scene
+                field_of_view=fov
             )
             
-            # Capture images from the camera at full resolution
             self._image_capture = ImageCapture(
                 avatar_ids=["overhead_cam"],
                 path=self._recording_path,
-                png=True
+                png=False
             )
             
             logger.info(f"Recording at {width}x{height} resolution")
@@ -299,35 +312,50 @@ class TDWBackend(PhysicsBackend):
         magnebot = state.magnebot
         
         # Get images from Magnebot's camera
-        # Images are in magnebot.dynamic.images after communicate()
-        pil_images = magnebot.dynamic.get_pil_images()
+        rgb = None
         
-        # If no images yet, advance one frame and retry once
-        if not pil_images and self._controller:
-            self._controller.communicate([])
+        # Try multiple methods to get images (API changed across versions)
+        try:
+            # Method 1: get_pil_images() - standard approach
             pil_images = magnebot.dynamic.get_pil_images()
+            if pil_images:
+                for key in ["img", "_img", "0", "camera"]:
+                    if key in pil_images:
+                        rgb = np.array(pil_images[key])
+                        break
+                if rgb is None and pil_images:
+                    first_key = list(pil_images.keys())[0]
+                    rgb = np.array(pil_images[first_key])
+        except Exception:
+            pass
         
-        # If still no images, force a Wait action to trigger image capture
-        if not pil_images and self._controller:
+        # Method 2: Try raw images dict
+        if rgb is None:
             try:
-                from magnebot.actions.wait import Wait
-                magnebot.action = Wait()
-                self._controller.communicate([])
-                pil_images = magnebot.dynamic.get_pil_images()
+                if hasattr(magnebot.dynamic, 'images') and magnebot.dynamic.images:
+                    for key, img_data in magnebot.dynamic.images.items():
+                        if hasattr(img_data, 'shape'):
+                            rgb = np.array(img_data)
+                            break
             except Exception:
                 pass
         
-        # RGB image (key can be "img" or "_img" depending on TDW version)
-        if "img" in pil_images:
-            rgb = np.array(pil_images["img"])
-        elif "_img" in pil_images:
-            rgb = np.array(pil_images["_img"])
-        else:
-            # Fallback: empty image (might happen on first frame)
+        # Method 3: Force a communicate and retry
+        if rgb is None and self._controller:
+            self._controller.communicate([])
+            try:
+                pil_images = magnebot.dynamic.get_pil_images()
+                if pil_images:
+                    first_key = list(pil_images.keys())[0]
+                    rgb = np.array(pil_images[first_key])
+            except Exception:
+                pass
+        
+        # Fallback: create placeholder image
+        if rgb is None:
             rgb = np.zeros((256, 256, 3), dtype=np.uint8)
-            if pil_images:
-                logger.debug(f"Available image keys for {robot_id}: {list(pil_images.keys())}")
-            else:
+            # Only log warning occasionally to avoid spam
+            if self._sim_time < 1.0 or int(self._sim_time * 10) % 50 == 0:
                 logger.warning(f"No RGB image available for {robot_id}")
         
         # Depth values
@@ -458,29 +486,22 @@ class TDWBackend(PhysicsBackend):
             return False
         
         try:
-            from tdw.controller import Controller
-            
             obj_id = self._controller.get_unique_id()
-            
-            # Map common names to TDW model names
-            model_map = {
-                "box": "iron_box",
-                "crate": "wood_crate",
-                "pallet": "pallet_plastic_rectangular",
-                "bin": "basket_18inx18inx12iin_plastic_lattice"
+            spawn_pos = {
+                "x": float(position[0]), 
+                "y": float(position[1]), 
+                "z": float(position[2])
             }
-            model_name = model_map.get(object_type, object_type)
             
-            self._controller.communicate([
-                self._controller.get_add_object(
-                    model_name=model_name,
-                    object_id=obj_id,
-                    position={"x": position[0], "y": position[1], "z": position[2]}
-                )
-            ])
-            
+            cmd = self._controller.get_add_object(
+                model_name="iron_box",
+                object_id=obj_id,
+                position=spawn_pos,
+                library="models_core.json"
+            )
+            self._controller.communicate([cmd])
             self._objects[object_id] = obj_id
-            logger.info(f"Spawned object '{object_id}' ({model_name}) at {position}")
+            logger.info(f"Spawned '{object_id}' at {spawn_pos}")
             return True
             
         except Exception as e:
@@ -489,9 +510,29 @@ class TDWBackend(PhysicsBackend):
     
     def get_object_position(self, object_id: str) -> Optional[Tuple[float, float, float]]:
         """Get object position from TDW"""
-        # TODO: Query TDW for actual object transforms
-        # For now, return None (position tracking not implemented)
-        return None
+        if not self._controller or object_id not in self._objects:
+            return None
+        
+        try:
+            from tdw.output_data import Transforms
+            
+            obj_id = self._objects[object_id]
+            resp = self._controller.communicate([
+                {"$type": "send_transforms", "frequency": "once"}
+            ])
+            
+            for data in resp:
+                if Transforms.get_data_type_id() == data[4:8]:
+                    transforms = Transforms(data)
+                    for i in range(transforms.get_num()):
+                        if transforms.get_id(i) == obj_id:
+                            pos = transforms.get_position(i)
+                            return (float(pos[0]), float(pos[1]), float(pos[2]))
+            return None
+            
+        except Exception as e:
+            logger.debug(f"Failed to get position for '{object_id}': {e}")
+            return None
     
     def close(self) -> None:
         """Close TDW connection and cleanup"""
@@ -508,6 +549,9 @@ class TDWBackend(PhysicsBackend):
                 self._controller = None
         
         self._robots.clear()
+        self._objects.clear()
+        self._initialized = False
+        logger.info("TDW backend closed")
     
     def _compile_video(self, fps: int = 30) -> Optional[str]:
         """
@@ -522,7 +566,6 @@ class TDWBackend(PhysicsBackend):
         video_path = os.path.join(self._recording_path, "simulation.mp4")
         frames_dir = os.path.join(self._recording_path, "overhead_cam")
         
-        # Try both .png and .jpg patterns (TDW may save as either)
         jpg_frames = glob.glob(os.path.join(frames_dir, "img_*.jpg"))
         png_frames = glob.glob(os.path.join(frames_dir, "img_*.png"))
         
@@ -566,9 +609,6 @@ class TDWBackend(PhysicsBackend):
             logger.warning("ffmpeg not found. Install with: sudo apt install ffmpeg")
             logger.info(f"Frames saved in: {frames_dir}")
             return None
-        self._objects.clear()
-        self._initialized = False
-        logger.info("TDW backend closed")
     
     @property
     def sim_time(self) -> float:
