@@ -36,3 +36,7 @@ vit-pytorch
 positional-encodings[pytorch]
 opencv-python>=4.6.0
 lmdb
+
+# LeRobot VLA models (SmolVLA, Pi0, GR00T)
+# Install with: pip install lerobot[smolvla] or lerobot[pi] or lerobot[groot]
+lerobot>=0.4.0

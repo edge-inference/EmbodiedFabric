@@ -5,6 +5,3 @@
 [submodule "extern/visualnav-transformer"]
 	path = extern/visualnav-transformer
 	url = https://github.com/robodhruv/visualnav-transformer.git
-[submodule "extern/visualnav-transformer"]
-	path = extern/visualnav-transformer
-	url = https://github.com/robodhruv/visualnav-transformer.git

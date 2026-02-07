@@ -141,12 +141,19 @@ class VLAAgent(RobotAgent):
         )
         
         # Convert VLA action to robot command
+        control_mode = getattr(action, 'control_mode', 'high_level')
+        joint_vels = getattr(action, 'joint_velocities', None)
+        joint_pos = getattr(action, 'joint_positions', None)
+        
         command = RobotCommand(
             robot_id=self.robot_id,
             linear_velocity=(action.base_velocity[0], 0.0, action.base_velocity[1]),
             angular_velocity=(0.0, 0.0, action.base_velocity[1] * 0.5),
             gripper_action=action.gripper_action,
-            arm_target=action.arm_action
+            arm_target=action.arm_action,
+            control_mode=control_mode,
+            joint_velocities=joint_vels,
+            joint_positions=joint_pos
         )
         
         # Send command (non-blocking)

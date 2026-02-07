@@ -1,6 +1,65 @@
 version: "3.8"
 
 services:
+  # VLM Planner (CogVLM2) - High-level task planning
+  vlm-planner:
+    build:
+      context: .
+      dockerfile: docker/vlm-planner/Dockerfile
+    container_name: vlm-planner
+    ports:
+      - "5600:5600"
+    volumes:
+      - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=${VLM_GPU:-1}
+      - HF_TOKEN=${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${VLM_GPU:-1}"]
+              capabilities: [gpu]
+    restart: unless-stopped
+    profiles: ["hierarchical"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5600/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+
+  # LeRobot VLA Server (SmolVLA/Pi0/GR00T)
+  lerobot:
+    build:
+      context: .
+      dockerfile: docker/lerobot-server/Dockerfile
+    container_name: lerobot-server
+    ports:
+      - "5700:5700"
+    volumes:
+      - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=${LEROBOT_GPU:-2}
+      - HF_TOKEN=${HF_TOKEN:-}
+      - LEROBOT_MODEL=${LEROBOT_MODEL:-smolvla}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${LEROBOT_GPU:-2}"]
+              capabilities: [gpu]
+    restart: unless-stopped
+    profiles: ["lerobot"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5700/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+
   cogact:
     build:
       context: .

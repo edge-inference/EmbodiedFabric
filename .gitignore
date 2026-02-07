@@ -27,3 +27,22 @@ testbed.txt
 
 # Docker volumes
 .docker/
+
+assets/
+venv*
+.venv*
+
+*AppImage*
+
+# Heavy logs and temp files
+logs/
+tmp/
+
+# Isaac Sim installations and assets
+isaac-sim*/
+.nvidia-omniverse/
+.local/share/ov/
+
+# TDW assets
+TDWBase/
+logs

@@ -16,16 +16,26 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 parser = argparse.ArgumentParser(description="4-Zone Floorplan Simulation")
 parser.add_argument("--robots", type=int, default=6, help="Number of robots")
-parser.add_argument("--steps", type=int, default=500, help="Simulation steps")
+parser.add_argument("--steps", type=int, default=200, help="Simulation steps")
 parser.add_argument("--vla", type=str, default="hierarchical",
-                    choices=["hierarchical", "cogact", "nomad", "cogact_server"],
-                    help="VLA model (default: hierarchical)")
+                    choices=["hierarchical", "cogact", "nomad", "cogact_server",
+                             "smolvla", "pi0", "groot", "lerobot_server"],
+                    help="VLA model")
+parser.add_argument("--control-mode", type=str, default="auto",
+                    choices=["auto", "high_level", "low_level"],
+                    help="Control mode for VLA (auto selects based on model)")
 parser.add_argument("--verbose", "-v", action="store_true")
 parser.add_argument("--no-record", action="store_true")
 parser.add_argument("--scene", type=str, default="floorplan_5b",
                     help="TDW scene name (e.g., 'tdw_room', 'floorplan_1a')")
 parser.add_argument("--layout", type=int, default=1,
                     help="Floorplan layout index (0, 1, 2)")
+parser.add_argument("--instruction", type=str, default=None,
+                    help="Custom instruction for all robots (e.g., 'move forward')")
+parser.add_argument("--tdw-address", type=str, default=None,
+                    help="Connect to existing TDW build at this address (skip launch)")
+parser.add_argument("--tdw-port", type=int, default=1071,
+                    help="TDW port (default 1071)")
 args = parser.parse_args()
 
 import torch
@@ -34,10 +44,23 @@ if torch.cuda.is_available():
     _ = torch.zeros(1).cuda()
 
 import logging
+import os
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+log_dir = os.path.join(project_root, "logs")
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, "simulation.log")
+
 logging.basicConfig(
     level=logging.DEBUG if args.verbose else logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(log_file, mode='w')
+    ]
 )
+logging.info(f"Logging to {log_file}")
 
 from simulator.core import Simulator, SimulatorConfig
 from simulator.scenarios.warehouse import WarehouseLayout, ZoneID
@@ -123,10 +146,23 @@ class Floorplan4ZoneSimulator(Simulator):
         return True
 
     def _spawn_warehouse_objects(self):
-        """Spawn objects if not using pre-built scene."""
+        """Spawn objects. For floorplans, add graspable items."""
         objects = self.layout.get_objects_to_spawn()
         if not objects:
             print("\nUsing pre-built scene")
+            # Add graspable objects to floorplan scenes
+            graspable = [
+                ("box_1", "iron_box", (1.0, 0.5, 1.0)),
+                ("box_2", "iron_box", (-1.5, 0.5, 2.0)),
+                ("box_3", "iron_box", (2.0, 0.5, -1.0)),
+            ]
+            print(f"Spawning {len(graspable)} graspable objects...")
+            for obj_id, obj_type, pos in graspable:
+                try:
+                    self._backend.spawn_object(obj_id, obj_type, pos)
+                    print(f"  Spawned {obj_id} at {pos}")
+                except Exception as e:
+                    print(f"  Warning: {obj_id}: {e}")
             return
         print(f"\nSpawning {len(objects)} objects...")
         for obj in objects:
@@ -192,21 +228,24 @@ class Floorplan4ZoneSimulator(Simulator):
         }
 
 
-def assign_tasks(sim: Floorplan4ZoneSimulator):
-    """Assign pickup/dropoff tasks to robots based on their zones."""
-    tasks = [
-        ("robot_0", "T1", "T5", "pickup at T1, drop off at T5"),
-        ("robot_1", "T2", "T5", "pickup at T2, drop off at T5"),
-        ("robot_2", "T3", "T5", "pickup at T3, drop off at T5"),
-        ("robot_3", "T4", "T5", "pickup at T4, drop off at T5"),
-        ("robot_4", "T1", "T5", "go to T1, pick box, return to dock"),
-        ("robot_5", "T2", "T5", "go to T2, pick box, return to dock"),
+def assign_tasks(sim: Floorplan4ZoneSimulator, custom_instruction: str = None):
+    """Assign tasks to robots based on scene. Floorplan 5b has living room, kitchen, bedroom."""
+    house_instructions = [
+        "pick up the box",
+        "grab the box and move it forward",
+        "navigate to the box and grasp it",
+        "move toward the sofa",
+        "explore the room",
+        "navigate around the furniture",
     ]
-    for robot_id, pickup, dropoff, instruction in tasks:
-        if robot_id in sim.robots:
-            robot = sim.robots[robot_id]
-            robot._instruction = instruction
-            print(f"  {robot_id}: {instruction}")
+    
+    for i, robot_id in enumerate(sorted(sim.robots.keys())):
+        robot = sim.robots[robot_id]
+        if custom_instruction:
+            robot._instruction = custom_instruction
+        else:
+            robot._instruction = house_instructions[i % len(house_instructions)]
+        print(f"  {robot_id}: {robot._instruction}")
 
 
 def run_simulation():
@@ -222,9 +261,16 @@ def run_simulation():
             scene_name = f"floorplan_{match.group(1)}"
             layout_index = int(match.group(2))
 
+    # Determine if we should launch TDW or connect to existing
+    launch_build = args.tdw_address is None
+    tdw_address = args.tdw_address or "localhost"
+    
+    # Use BACKEND=isaac env var to switch to Isaac Sim
+    backend = os.environ.get("BACKEND", "tdw")
+    
     config = SimulatorConfig(
         n_robots=args.robots,
-        scene_name=scene_name,
+        scene_name=scene_name if backend == "tdw" else "warehouse",
         floorplan_layout=layout_index,
         scene_size=(20, 20),
         vla_model=args.vla,
@@ -239,13 +285,21 @@ def run_simulation():
         recording_path="recordings/floorplan_4zone",
         recording_resolution=(1280, 720),
         inference_interval=5,
-        verbose=args.verbose
+        verbose=args.verbose,
+        backend=backend,
+        tdw_launch_build=launch_build,
+        tdw_address=tdw_address,
+        tdw_port=args.tdw_port
     )
 
     print(f"\nConfiguration:")
     print(f"  Robots: {config.n_robots}")
     print(f"  VLA: {config.vla_model}")
     print(f"  Scene: {config.scene_size[0]}m x {config.scene_size[1]}m")
+    if launch_build:
+        print(f"  TDW: launching new build")
+    else:
+        print(f"  TDW: connecting to {tdw_address}:{args.tdw_port}")
 
     sim = Floorplan4ZoneSimulator(config)
 
@@ -255,7 +309,7 @@ def run_simulation():
         return
 
     print("\nAssigning tasks:")
-    assign_tasks(sim)
+    assign_tasks(sim, args.instruction)
 
     def progress_callback(state):
         if state.step_count % 100 == 0:

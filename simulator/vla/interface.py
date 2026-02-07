@@ -39,6 +39,10 @@ class VLAAction:
     - Continuous (velocity commands)
     - Discrete (grasp/release)
     - Hybrid (move to position, then grasp)
+    
+    Control modes:
+    - high_level: Abstract commands (move_by, grasp)
+    - low_level: Direct joint control
     """
     base_velocity: Tuple[float, float] = (0.0, 0.0)    # (linear m/s, angular rad/s)
     arm_action: Optional[np.ndarray] = None             # Joint deltas or EE target
@@ -48,6 +52,10 @@ class VLAAction:
     confidence: float = 1.0                             # Action confidence
     
     reasoning: Optional[str] = None                     # Explanation (for debugging)
+    
+    control_mode: str = "high_level"                    # high_level or low_level
+    joint_velocities: Optional[np.ndarray] = None       # For low-level: raw joint vels
+    joint_positions: Optional[np.ndarray] = None        # For low-level: raw joint pos
 
 
 @dataclass
@@ -127,6 +135,11 @@ def _cache_key(model_name: str, kwargs: Dict[str, Any]) -> str:
     if model_name == "hierarchical":
         device = kwargs.get("device", "cuda:0")
         return f"{model_name}|{device}"
+    if model_name in ("smolvla", "pi0", "groot"):
+        model_path = kwargs.get("model_path", "default")
+        device = kwargs.get("device", "cuda:0")
+        control_mode = kwargs.get("control_mode", "low_level")
+        return f"{model_name}|{model_path}|{device}|{control_mode}"
     return f"{model_name}|default"
 
 
@@ -141,12 +154,10 @@ def create_vla(model_name: str, **kwargs) -> VLAInterface:
         _VLA_CACHE[key] = OpenVLAModel(**kwargs)
     elif model_name == "cogact":
         from .cogact import CogACTVLA
-        # Drop unsupported kwargs from generic VLAAgent
         kwargs.pop("quantization", None)
         _VLA_CACHE[key] = CogACTVLA(**kwargs)
     elif model_name == "cogact_server":
         from .cogact_server import CogACTServerClient
-        # Drop unsupported kwargs from generic VLAAgent
         kwargs.pop("quantization", None)
         _VLA_CACHE[key] = CogACTServerClient(**kwargs)
     elif model_name == "trt_openvla":
@@ -166,8 +177,25 @@ def create_vla(model_name: str, **kwargs) -> VLAInterface:
         from .hierarchical import HierarchicalPlanner
         kwargs.pop("quantization", None)
         _VLA_CACHE[key] = HierarchicalPlanner(**kwargs)
+    elif model_name == "smolvla":
+        from .lerobot_vla import SmolVLAModel
+        kwargs.pop("quantization", None)
+        _VLA_CACHE[key] = SmolVLAModel(**kwargs)
+    elif model_name == "pi0":
+        from .lerobot_vla import Pi0Model
+        kwargs.pop("quantization", None)
+        _VLA_CACHE[key] = Pi0Model(**kwargs)
+    elif model_name == "groot":
+        from .lerobot_vla import GR00TModel
+        kwargs.pop("quantization", None)
+        _VLA_CACHE[key] = GR00TModel(**kwargs)
+    elif model_name == "lerobot_server":
+        from .lerobot_vla import LeRobotServerClient
+        kwargs.pop("quantization", None)
+        _VLA_CACHE[key] = LeRobotServerClient(**kwargs)
     else:
         raise ValueError(f"Unknown VLA model: {model_name}. "
-                        f"Options: openvla, cogact, cogact_server, nomad, hierarchical, profiled")
+                        f"Options: openvla, cogact, cogact_server, nomad, hierarchical, "
+                        f"smolvla, pi0, groot, lerobot_server, profiled")
     
     return _VLA_CACHE[key]

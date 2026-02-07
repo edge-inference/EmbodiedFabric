@@ -24,6 +24,12 @@ class RobotObservation:
     joint_positions: Optional[np.ndarray] = None
 
 
+class ControlMode:
+    """Control mode for robot commands"""
+    HIGH_LEVEL = "high_level"   # Abstract: move_by, turn_by, grasp
+    LOW_LEVEL = "low_level"     # Direct: joint velocities/positions
+
+
 @dataclass
 class RobotCommand:
     """Command to send to a robot"""
@@ -32,6 +38,9 @@ class RobotCommand:
     angular_velocity: Tuple[float, float, float] = (0.0, 0.0, 0.0)
     gripper_action: Optional[float] = None       # None=no change, 0=open, 1=close
     arm_target: Optional[np.ndarray] = None      # Joint targets or EE pose
+    control_mode: str = ControlMode.HIGH_LEVEL   # high_level or low_level
+    joint_velocities: Optional[np.ndarray] = None  # For low-level: per-joint velocities
+    joint_positions: Optional[np.ndarray] = None   # For low-level: per-joint targets
 
 
 class PhysicsBackend(ABC):

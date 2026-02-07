@@ -36,18 +36,25 @@ def _patch_json_for_numpy():
 _patch_json_for_numpy()
 
 
+COLLISION_RECOVERY_THRESHOLD = 2
+RECOVERY_TURN_RANGE = (30, 120)
+
+
 @dataclass
 class RobotState:
     """Track robot's pending action state"""
     magnebot: Any = None
     pending_action: bool = False
     action_type: str = ""
+    consecutive_collisions: int = 0
+    recovering: bool = False
 
 
 class TDWBackend(PhysicsBackend):
     """TDW physics backend with Magnebot."""
     
-    def __init__(self, config, enable_recording: bool = False, recording_path: str = None):
+    def __init__(self, config, enable_recording: bool = False, recording_path: str = None,
+                 launch_build: bool = True, tdw_address: str = "localhost", tdw_port: int = 1071):
         self.config = config
         self._controller = None
         self._robots: Dict[str, RobotState] = {}
@@ -55,6 +62,11 @@ class TDWBackend(PhysicsBackend):
         self._sim_time = 0.0
         self._initialized = False
         self._robot_counter = 0
+        
+        # TDW connection settings
+        self._launch_build = launch_build
+        self._tdw_address = tdw_address
+        self._tdw_port = tdw_port
         
         # Video recording
         self._recording_enabled = enable_recording
@@ -70,12 +82,23 @@ class TDWBackend(PhysicsBackend):
             from tdw.controller import Controller
             from tdw.tdw_utils import TDWUtils
             
-            logger.info("Starting TDW controller...")
-            self._controller = Controller(launch_build=True)
+            if self._launch_build:
+                logger.info("Starting TDW controller (launching build)...")
+                self._controller = Controller(launch_build=True)
+            else:
+                logger.info(f"Connecting to existing TDW build at {self._tdw_address}:{self._tdw_port}...")
+                self._controller = Controller(
+                    launch_build=False,
+                    address=self._tdw_address,
+                    port=self._tdw_port
+                )
             
+            # Reset scene state (clear from previous run)
             self._controller.communicate([
-                {"$type": "set_target_framerate", "framerate": -1}
+                {"$type": "set_target_framerate", "framerate": -1},
+                {"$type": "destroy_all_objects"}
             ])
+            self._controller.add_ons.clear()
             
             scene_name = getattr(self.config, 'scene_name', None)
             floorplan_layout = getattr(self.config, "floorplan_layout", None)
@@ -159,11 +182,12 @@ class TDWBackend(PhysicsBackend):
             
             scene_name = getattr(self.config, "scene_name", "") or ""
             if scene_name.startswith("floorplan"):
-                camera_pos = {"x": 0, "y": 22, "z": 0}
-                camera_look = {"x": 0, "y": 0, "z": 0}
-                fov = 70
+                # Angled view: rotated left, tilted back, same height
+                camera_pos = {"x": -8, "y": 12, "z": -12}
+                camera_look = {"x": 1, "y": 0, "z": 2}
+                fov = 68
             else:
-                camera_pos = {"x": 0, "y": 35, "z": -25}
+                camera_pos = {"x": -5, "y": 25, "z": -8}
                 camera_look = {"x": 0, "y": 1.5, "z": 0}
                 fov = 60
 
@@ -223,8 +247,17 @@ class TDWBackend(PhysicsBackend):
         if not self._controller:
             return
         
-        # Communicate advances the simulation (also captures frames if recording)
-        self._controller.communicate([])
+        # Ensure robot camera sensors stay enabled (safety against overrides)
+        commands = []
+        for state in self._robots.values():
+            if state.magnebot and state.magnebot.static:
+                commands.append({
+                    "$type": "enable_image_sensor",
+                    "enable": True,
+                    "avatar_id": state.magnebot.static.avatar_id
+                })
+        
+        self._controller.communicate(commands)
         
         if self._recording_enabled:
             self._frame_count += 1
@@ -234,7 +267,7 @@ class TDWBackend(PhysicsBackend):
         self._update_action_states()
     
     def _update_action_states(self) -> None:
-        """Update pending action states for all robots"""
+        """Update pending action states and track collisions for recovery."""
         from magnebot import ActionStatus
         
         for robot_id, state in self._robots.items():
@@ -242,9 +275,17 @@ class TDWBackend(PhysicsBackend):
                 status = state.magnebot.action.status
                 if status != ActionStatus.ongoing:
                     state.pending_action = False
-                    if status != ActionStatus.success:
-                        logger.warning(f"Robot {robot_id} action '{state.action_type}' "
-                                     f"completed with status: {status}")
+                    if status in (ActionStatus.collision, ActionStatus.failed_to_move):
+                        state.consecutive_collisions += 1
+                        logger.warning(
+                            f"Robot {robot_id} action '{state.action_type}' "
+                            f"{status.name} #{state.consecutive_collisions}")
+                    elif status == ActionStatus.success:
+                        state.consecutive_collisions = 0
+                    else:
+                        logger.warning(
+                            f"Robot {robot_id} action '{state.action_type}' "
+                            f"completed with status: {status}")
     
     def spawn_robot(self,
                     robot_id: str,
@@ -278,7 +319,10 @@ class TDWBackend(PhysicsBackend):
             # Add to controller
             self._controller.add_ons.append(magnebot)
             
-            # Store state
+            # Disable Magnebot's built-in "don't repeat after collision" check
+            # so we can handle recovery ourselves with forced turns
+            magnebot.collision_detection.previous_was_same = False
+            
             self._robots[robot_id] = RobotState(
                 magnebot=magnebot,
                 pending_action=False,
@@ -288,8 +332,17 @@ class TDWBackend(PhysicsBackend):
             # Initialize the robot in the scene
             self._controller.communicate([])
             
+            # Register Magnebot camera with ImageCapture so images are
+            # requested every frame (ImageCapture overrides send_images globally)
+            if self._image_capture is not None and magnebot.static is not None:
+                avatar_id = magnebot.static.avatar_id
+                if avatar_id not in self._image_capture.avatar_ids:
+                    self._image_capture.avatar_ids.append(avatar_id)
+                    logger.info(f"Registered avatar '{avatar_id}' with ImageCapture")
+            
             self._robot_counter += 1
             logger.info(f"Spawned Magnebot '{robot_id}' at {position}")
+            logger.debug(f"[{robot_id}] image_frequency={magnebot.image_frequency}")
             return True
             
         except ImportError:
@@ -314,47 +367,26 @@ class TDWBackend(PhysicsBackend):
         # Get images from Magnebot's camera
         rgb = None
         
-        # Try multiple methods to get images (API changed across versions)
         try:
-            # Method 1: get_pil_images() - standard approach
             pil_images = magnebot.dynamic.get_pil_images()
             if pil_images:
-                for key in ["img", "_img", "0", "camera"]:
-                    if key in pil_images:
+                # Standard key is "img" (pass mask "_img" -> stored as "img")
+                for key in ["img", "_img"]:
+                    if key in pil_images and pil_images[key] is not None:
                         rgb = np.array(pil_images[key])
                         break
-                if rgb is None and pil_images:
-                    first_key = list(pil_images.keys())[0]
-                    rgb = np.array(pil_images[first_key])
-        except Exception:
-            pass
+                if rgb is None:
+                    first_key = next(iter(pil_images))
+                    if pil_images[first_key] is not None:
+                        rgb = np.array(pil_images[first_key])
+            else:
+                logger.debug(f"[{robot_id}] pil_images empty, raw keys: "
+                             f"{list(magnebot.dynamic.images.keys()) if magnebot.dynamic.images else 'None'}")
+        except Exception as e:
+            logger.debug(f"[{robot_id}] get_pil_images error: {e}")
         
-        # Method 2: Try raw images dict
-        if rgb is None:
-            try:
-                if hasattr(magnebot.dynamic, 'images') and magnebot.dynamic.images:
-                    for key, img_data in magnebot.dynamic.images.items():
-                        if hasattr(img_data, 'shape'):
-                            rgb = np.array(img_data)
-                            break
-            except Exception:
-                pass
-        
-        # Method 3: Force a communicate and retry
-        if rgb is None and self._controller:
-            self._controller.communicate([])
-            try:
-                pil_images = magnebot.dynamic.get_pil_images()
-                if pil_images:
-                    first_key = list(pil_images.keys())[0]
-                    rgb = np.array(pil_images[first_key])
-            except Exception:
-                pass
-        
-        # Fallback: create placeholder image
         if rgb is None:
             rgb = np.zeros((256, 256, 3), dtype=np.uint8)
-            # Only log warning occasionally to avoid spam
             if self._sim_time < 1.0 or int(self._sim_time * 10) % 50 == 0:
                 logger.warning(f"No RGB image available for {robot_id}")
         
@@ -401,74 +433,200 @@ class TDWBackend(PhysicsBackend):
         """
         Send command to a Magnebot.
         
+        Supports two control modes:
+        - HIGH_LEVEL: Abstract commands (move_by, turn_by, grasp)
+        - LOW_LEVEL: Direct joint velocity/position control
+        
         Commands are non-blocking. Call step() to advance the action.
-        Check robot state to see if action is complete.
         """
+        from .base import ControlMode
+        
         state = self._robots.get(command.robot_id)
         if state is None or state.magnebot is None:
             raise ValueError(f"Robot '{command.robot_id}' not found")
         
         magnebot = state.magnebot
         
-        # Don't send new commands while one is pending
-        if state.pending_action:
+        # Don't send new commands while one is pending (high-level mode)
+        if state.pending_action and command.control_mode == ControlMode.HIGH_LEVEL:
             logger.debug(f"Robot {command.robot_id} has pending action, skipping")
             return False
         
         try:
-            # Movement command
-            vx, _, vz = command.linear_velocity
-            if vx != 0.0 or vz != 0.0:
-                # Map velocity-like action to visible movement distance.
-                # VLA outputs ~0.1-0.2, scale up for 20x20m room visibility
-                magnitude = float(np.hypot(vx, vz))
-                distance = magnitude * 5.0  # 5m scale factor for visibility
-                if vx < 0:
-                    distance = -distance
-                magnebot.move_by(distance=distance, arrived_at=0.3)
-                state.pending_action = True
-                state.action_type = f"move_by({distance:.2f})"
-                logger.debug(f"[{command.robot_id}] MOVE: vx={vx:.3f} vz={vz:.3f} -> distance={distance:.3f}m")
-                return True
-            
-            # Rotation command
-            if command.angular_velocity[2] != 0.0:
-                angle = command.angular_velocity[2] * 15.0  # Turn 15 deg per command
-                magnebot.turn_by(angle=angle)
-                state.pending_action = True
-                state.action_type = f"turn_by({angle:.1f})"
-                logger.debug(f"[{command.robot_id}] TURN: angle={angle:.1f}deg")
-                return True
-            
-            # Gripper command
-            if command.gripper_action is not None:
-                from magnebot import Arm
-                
-                if command.gripper_action > 0.5:
-                    # Grasp - need a target object
-                    if command.arm_target is not None:
-                        magnebot.grasp(target=command.arm_target, arm=Arm.right)
-                        state.pending_action = True
-                        state.action_type = f"grasp({command.arm_target})"
-                        logger.debug(f"[{command.robot_id}] GRASP: target={command.arm_target}")
-                else:
-                    # Drop - only if holding something
-                    held_right = magnebot.dynamic.held.get(Arm.right, [])
-                    if len(held_right) > 0:
-                        # Drop the first held object
-                        target_obj = int(held_right[0])
-                        magnebot.drop(target=target_obj, arm=Arm.right)
-                        state.pending_action = True
-                        state.action_type = f"drop({target_obj})"
-                        logger.debug(f"[{command.robot_id}] DROP: target={target_obj}")
-                return True
-            
-            logger.debug(f"[{command.robot_id}] NO-OP: zero velocity command")
-            return True  # No-op command
+            if command.control_mode == ControlMode.LOW_LEVEL:
+                return self._send_low_level_command(command, state, magnebot)
+            else:
+                return self._send_high_level_command(command, state, magnebot)
             
         except Exception as e:
             logger.error(f"Command failed for {command.robot_id}: {e}")
             return False
+
+    def _send_low_level_command(self, command: RobotCommand, state: RobotState, magnebot) -> bool:
+        """Send low-level joint control commands (for LeRobot VLAs)."""
+        if command.joint_velocities is not None:
+            joint_vels = command.joint_velocities
+            
+            forward = command.linear_velocity[0]
+            turn = command.angular_velocity[2]
+            
+            # Collision recovery: after repeated collisions, force a random turn
+            # to give the VLA a new viewpoint (AFI-inspired proprioception check)
+            if state.consecutive_collisions >= COLLISION_RECOVERY_THRESHOLD:
+                import random
+                angle = random.uniform(*RECOVERY_TURN_RANGE)
+                if random.random() < 0.5:
+                    angle = -angle
+                magnebot.turn_by(angle=angle)
+                state.pending_action = True
+                state.recovering = True
+                state.action_type = f"recovery_turn({angle:.0f})"
+                logger.info(f"[{command.robot_id}] COLLISION RECOVERY: "
+                            f"turning {angle:.0f}deg after {state.consecutive_collisions} collisions")
+                state.consecutive_collisions = 0
+                return True
+            
+            if abs(forward) > 0.01:
+                distance = forward * 3.0
+                magnebot.move_by(distance=distance, arrived_at=0.05)
+                state.pending_action = True
+                state.action_type = f"low_level_move({forward:.3f})"
+                logger.debug(f"[{command.robot_id}] LOW_LEVEL move: forward={forward:.3f} -> dist={distance:.3f}")
+            elif abs(turn) > 0.01:
+                angle = turn * 30.0
+                magnebot.turn_by(angle=angle)
+                state.pending_action = True
+                state.action_type = f"low_level_turn({turn:.3f})"
+                logger.debug(f"[{command.robot_id}] LOW_LEVEL turn: turn={turn:.3f} -> angle={angle:.1f}")
+            
+            # Arm joint control (if available)
+            if len(joint_vels) > 2:
+                arm_vels = joint_vels[2:6] if len(joint_vels) >= 6 else joint_vels[2:]
+                # Store for potential IK-based control
+                logger.debug(f"[{command.robot_id}] LOW_LEVEL arm: {arm_vels}")
+            
+            # Gripper control
+            if len(joint_vels) > 6:
+                gripper_vel = float(joint_vels[6])
+                if gripper_vel > 0.3:
+                    self._try_grasp(magnebot, state, command.robot_id)
+                elif gripper_vel < -0.3:
+                    self._try_drop(magnebot, state, command.robot_id)
+            
+            return True
+        
+        elif command.joint_positions is not None:
+            # Position control
+            joint_pos = command.joint_positions
+            logger.debug(f"[{command.robot_id}] LOW_LEVEL joint positions: {joint_pos[:4]}...")
+            
+            # For now, convert to velocity-like increments
+            # Full IK control would require custom TDW commands
+            return True
+        
+        return False
+
+    def _send_high_level_command(self, command: RobotCommand, state: RobotState, magnebot) -> bool:
+        """Send high-level abstract commands (original behavior)."""
+        vx, _, vz = command.linear_velocity
+        if vx != 0.0 or vz != 0.0:
+            magnitude = float(np.hypot(vx, vz))
+            distance = magnitude * 5.0
+            if vx < 0:
+                distance = -distance
+            magnebot.move_by(distance=distance, arrived_at=0.3)
+            state.pending_action = True
+            state.action_type = f"move_by({distance:.2f})"
+            logger.debug(f"[{command.robot_id}] MOVE: vx={vx:.3f} vz={vz:.3f} -> distance={distance:.3f}m")
+            return True
+        
+        if command.angular_velocity[2] != 0.0:
+            angle = command.angular_velocity[2] * 15.0
+            magnebot.turn_by(angle=angle)
+            state.pending_action = True
+            state.action_type = f"turn_by({angle:.1f})"
+            logger.debug(f"[{command.robot_id}] TURN: angle={angle:.1f}deg")
+            return True
+        
+        if command.gripper_action is not None:
+            if command.gripper_action > 0.5:
+                if command.arm_target is not None:
+                    self._try_grasp(magnebot, state, command.robot_id, command.arm_target)
+            else:
+                self._try_drop(magnebot, state, command.robot_id)
+            return True
+        
+        logger.debug(f"[{command.robot_id}] NO-OP: zero velocity command")
+        return True
+
+    def _try_grasp(self, magnebot, state: RobotState, robot_id: str, target=None) -> None:
+        """Attempt to grasp nearest object or specified target."""
+        from magnebot import Arm
+        
+        if target is not None:
+            magnebot.grasp(target=target, arm=Arm.right)
+            state.pending_action = True
+            state.action_type = f"grasp({target})"
+            logger.debug(f"[{robot_id}] GRASP: target={target}")
+        else:
+            # Find nearest graspable object
+            nearest_obj = self._find_nearest_object(magnebot)
+            if nearest_obj is not None:
+                magnebot.grasp(target=nearest_obj, arm=Arm.right)
+                state.pending_action = True
+                state.action_type = f"grasp({nearest_obj})"
+                logger.debug(f"[{robot_id}] GRASP: nearest={nearest_obj}")
+
+    def _try_drop(self, magnebot, state: RobotState, robot_id: str) -> None:
+        """Drop held object if any."""
+        from magnebot import Arm
+        
+        held_right = magnebot.dynamic.held.get(Arm.right, [])
+        if len(held_right) > 0:
+            target_obj = int(held_right[0])
+            magnebot.drop(target=target_obj, arm=Arm.right)
+            state.pending_action = True
+            state.action_type = f"drop({target_obj})"
+            logger.debug(f"[{robot_id}] DROP: target={target_obj}")
+
+    def _find_nearest_object(self, magnebot) -> Optional[int]:
+        """Find nearest graspable object using a single communicate call."""
+        if not self._objects or not self._controller:
+            return None
+        
+        try:
+            from tdw.output_data import OutputData, Transforms
+            
+            robot_pos = magnebot.dynamic.transform.position
+            resp = self._controller.communicate([
+                {"$type": "send_transforms", "frequency": "once"}
+            ])
+            
+            obj_positions = {}
+            for i in range(len(resp) - 1):
+                r_id = OutputData.get_data_type_id(resp[i])
+                if r_id == "tran":
+                    transforms = Transforms(resp[i])
+                    for j in range(transforms.get_num()):
+                        obj_positions[transforms.get_id(j)] = transforms.get_position(j)
+            
+            nearest_dist = float('inf')
+            nearest_obj = None
+            for obj_name, obj_id in self._objects.items():
+                if obj_id in obj_positions:
+                    pos = obj_positions[obj_id]
+                    dist = np.sqrt(
+                        (robot_pos[0] - pos[0])**2 +
+                        (robot_pos[2] - pos[2])**2
+                    )
+                    if dist < nearest_dist and dist < 2.0:
+                        nearest_dist = dist
+                        nearest_obj = obj_id
+            
+            return nearest_obj
+        except Exception as e:
+            logger.debug(f"_find_nearest_object error: {e}")
+            return None
     
     def is_robot_idle(self, robot_id: str) -> bool:
         """Check if robot has no pending actions"""
@@ -514,19 +672,20 @@ class TDWBackend(PhysicsBackend):
             return None
         
         try:
-            from tdw.output_data import Transforms
+            from tdw.output_data import OutputData, Transforms
             
             obj_id = self._objects[object_id]
             resp = self._controller.communicate([
                 {"$type": "send_transforms", "frequency": "once"}
             ])
             
-            for data in resp:
-                if Transforms.get_data_type_id() == data[4:8]:
-                    transforms = Transforms(data)
-                    for i in range(transforms.get_num()):
-                        if transforms.get_id(i) == obj_id:
-                            pos = transforms.get_position(i)
+            for i in range(len(resp) - 1):
+                r_id = OutputData.get_data_type_id(resp[i])
+                if r_id == "tran":
+                    transforms = Transforms(resp[i])
+                    for j in range(transforms.get_num()):
+                        if transforms.get_id(j) == obj_id:
+                            pos = transforms.get_position(j)
                             return (float(pos[0]), float(pos[1]), float(pos[2]))
             return None
             
@@ -542,7 +701,12 @@ class TDWBackend(PhysicsBackend):
         
         if self._controller:
             try:
-                self._controller.communicate([{"$type": "terminate"}])
+                if self._launch_build:
+                    # Only terminate if we launched the build
+                    self._controller.communicate([{"$type": "terminate"}])
+                else:
+                    # Just disconnect, leave build running
+                    logger.info("Disconnecting from TDW (build stays running)")
             except Exception as e:
                 logger.warning(f"Error during TDW shutdown: {e}")
             finally:

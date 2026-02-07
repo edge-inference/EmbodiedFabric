@@ -48,9 +48,18 @@ class SimulatorConfig:
     enable_recording: bool = False                # Record video of simulation
     recording_path: str = "recordings"            # Path to save recordings
     recording_resolution: tuple = (1280, 720)     # Video resolution (width, height)
+    recording_view: str = "overhead"             # overhead, angled, side
+    
+    # Backend selection
+    backend: str = "tdw"                          # "tdw" or "isaac"
+    
+    # TDW connection (persistent server mode)
+    tdw_launch_build: bool = True                 
+    tdw_address: str = "localhost"                
+    tdw_port: int = 1071                         
     
     # Debug
-    verbose: bool = False                         # Enable verbose debug output
+    verbose: bool = False                         
 
 
 @dataclass
@@ -90,16 +99,28 @@ class Simulator:
     def initialize(self) -> bool:
         """Initialize all simulator components"""
         logger.info(f"Initializing simulator: robots={self.config.n_robots}, "
-                   f"vla={self.config.vla_model}")
+                   f"vla={self.config.vla_model}, backend={self.config.backend}")
         
-        from .backend.tdw_backend import TDWBackend
-        self._backend = TDWBackend(
-            self.config,
-            enable_recording=self.config.enable_recording,
-            recording_path=self.config.recording_path
-        )
+        if self.config.backend == "isaac":
+            from .backend.isaac_backend import IsaacSimBackend
+            self._backend = IsaacSimBackend(
+                self.config,
+                enable_recording=self.config.enable_recording,
+                recording_path=self.config.recording_path
+            )
+        else:
+            from .backend.tdw_backend import TDWBackend
+            self._backend = TDWBackend(
+                self.config,
+                enable_recording=self.config.enable_recording,
+                recording_path=self.config.recording_path,
+                launch_build=self.config.tdw_launch_build,
+                tdw_address=self.config.tdw_address,
+                tdw_port=self.config.tdw_port
+            )
+        
         if not self._backend.initialize():
-            logger.error("Failed to initialize TDW backend")
+            logger.error(f"Failed to initialize {self.config.backend} backend")
             return False
         
         self._create_robots()
@@ -180,33 +201,27 @@ class Simulator:
         
         self._coordinator.step()
         
-        # Batch inference path for CogACT (local or server)
-        if self.config.vla_model in ("cogact", "cogact_server"):
-            batch_obs = []
-            batch_agents = []
-            for robot in self._robots.values():
-                bundle = robot.build_vla_observation(self._coordinator, self._dsm)
-                if bundle is None:
-                    continue
-                backend_obs, vla_obs = bundle
-                batch_obs.append(vla_obs)
-                batch_agents.append((robot, backend_obs, vla_obs))
+        # Batch: collect all observations, run inference, apply actions
+        batch_obs = []
+        batch_agents = []
+        for robot in self._robots.values():
+            bundle = robot.build_vla_observation(self._coordinator, self._dsm)
+            if bundle is None:
+                continue
+            backend_obs, vla_obs = bundle
+            batch_obs.append(vla_obs)
+            batch_agents.append((robot, backend_obs, vla_obs))
+        
+        if batch_obs:
+            vla_model = batch_agents[0][0]._vla
+            if hasattr(vla_model, "predict_batch"):
+                actions = vla_model.predict_batch(batch_obs)
+            else:
+                actions = [vla_model.predict(obs) for obs in batch_obs]
             
-            if batch_obs:
-                vla_model = batch_agents[0][0]._vla
-                if hasattr(vla_model, "predict_batch"):
-                    actions = vla_model.predict_batch(batch_obs)
-                else:
-                    actions = [vla_model.predict(obs) for obs in batch_obs]
-                
-                for (robot, backend_obs, vla_obs), action in zip(batch_agents, actions):
-                    robot.apply_vla_action(action, backend_obs, vla_obs, self._profiler, self._dsm)
-        else:
-            for robot in self._robots.values():
-                robot.step(
-                    coordinator=self._coordinator,
-                    dsm=self._dsm,
-                    profiler=self._profiler
+            for (robot, backend_obs, vla_obs), action in zip(batch_agents, actions):
+                robot.apply_vla_action(
+                    action, backend_obs, vla_obs, self._profiler, self._dsm
                 )
         
         if self._dsm:
