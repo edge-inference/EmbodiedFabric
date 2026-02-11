@@ -1,13 +1,4 @@
-"""
-VLM High-Level Planner
-
-Uses CogVLM2 (or similar) for visual reasoning and task decomposition.
-Runs at 1-3 Hz to parse instructions and route to NAV/MANIP experts.
-
-Modes can be:
-- Local inference (GPU)
-- Server mode (HTTP endpoint)
-"""
+"""High-level VLM planner (NAV vs MANIP)."""
 
 from dataclasses import dataclass
 from enum import Enum
@@ -15,10 +6,14 @@ from typing import Optional
 from io import BytesIO
 import os
 import time
+import logging
+from urllib.parse import urljoin
 import numpy as np
 from PIL import Image
 
 from .interface import VLAObservation
+
+logger = logging.getLogger(__name__)
 
 
 class TaskMode(Enum):
@@ -29,7 +24,6 @@ class TaskMode(Enum):
 
 @dataclass
 class PlannerOutput:
-    """Output from VLM planner."""
     mode: TaskMode
     subgoal: str
     target_object: Optional[str] = None
@@ -39,32 +33,15 @@ class PlannerOutput:
 
 
 class VLMPlanner:
-    """
-    High-level VLM planner using CogVLM2 or similar.
-    
-    Analyzes scene + instruction to decide:
-    1. Task mode (NAV vs MANIP)
-    2. Current subgoal
-    3. Target object/location
-    """
+    """Planner wrapper for CogVLM2 or a /plan HTTP server."""
 
-    SYSTEM_PROMPT = """You are a robot task planner. Given an image of the scene and a task instruction, analyze and respond with:
-
-1. MODE: Either "NAV" (navigation/movement) or "MANIP" (manipulation/grasping)
-2. SUBGOAL: The immediate next action to take
-3. TARGET: The object or location to interact with
-4. REASONING: Brief explanation
-
-Format your response exactly as:
-MODE: [NAV or MANIP]
-SUBGOAL: [action description]
-TARGET: [object or location name]
-REASONING: [brief explanation]
-
-Examples:
-- "go to the shelf and pick up the red box" → First MODE: NAV, SUBGOAL: navigate to shelf
-- "pick up the box" when near box → MODE: MANIP, SUBGOAL: grasp the box
-- "push the cart forward" → MODE: MANIP, SUBGOAL: push cart"""
+    SYSTEM_PROMPT = ( #needs to be refined for a better prompt still
+        "Return exactly four lines:\n"
+        "MODE: NAV|MANIP\n"
+        "SUBGOAL: <next step>\n"
+        "TARGET: <object or location>\n"
+        "REASONING: <short>\n"
+    )
 
     def __init__(self,
                  model_id: str = "THUDM/cogvlm2-llama3-chat-19B",
@@ -85,7 +62,6 @@ Examples:
         self._cached_output: Optional[PlannerOutput] = None
 
     def load(self) -> bool:
-        """Load VLM model for local inference."""
         if self._loaded or self._server_url:
             return True
         
@@ -93,7 +69,7 @@ Examples:
             import torch
             from transformers import AutoModelForCausalLM, AutoTokenizer
             
-            print(f"Loading VLM planner: {self._model_id}")
+            logger.info("Loading VLM planner: %s", self._model_id)
             
             self._tokenizer = AutoTokenizer.from_pretrained(
                 self._model_id,
@@ -123,19 +99,18 @@ Examples:
                 self._model = self._model.to(self._device).eval()
             
             self._loaded = True
-            print(f"VLM planner loaded: {self._model_id}")
+            logger.info("VLM planner loaded: %s", self._model_id)
             return True
             
-        except Exception as e:
-            print(f"Failed to load VLM planner: {e}")
+        except Exception:
+            logger.exception("Failed to load VLM planner")
             return False
 
     def _parse_response(self, response: str) -> PlannerOutput:
-        """Parse VLM response into structured output."""
-        mode = TaskMode.MANIPULATION  # Default
+        mode = TaskMode.MANIPULATION
         subgoal = ""
-        target = None
-        reasoning = None
+        target: Optional[str] = None
+        reasoning: Optional[str] = None
         
         lines = response.strip().split('\n')
         for line in lines:
@@ -161,29 +136,52 @@ Examples:
             reasoning=reasoning
         )
 
-    def _call_server(self, image: np.ndarray, instruction: str) -> str:
-        """Call VLM server for inference."""
+    def _plan_url(self) -> str:
+        if not self._server_url:
+            raise RuntimeError("server_url is not set")
+        if self._server_url.rstrip("/").endswith("/plan"):
+            return self._server_url
+        return urljoin(self._server_url.rstrip("/") + "/", "plan")
+
+    def _call_server(self, image: np.ndarray, instruction: str) -> PlannerOutput:
         import requests
         import base64
-        from io import BytesIO
         
         pil_image = Image.fromarray(image)
         buffer = BytesIO()
         pil_image.save(buffer, format="JPEG")
         img_b64 = base64.b64encode(buffer.getvalue()).decode()
-        
-        prompt = f"{self.SYSTEM_PROMPT}\n\nInstruction: {instruction}"
-        
+
         response = requests.post(
-            self._server_url,
-            json={"image": img_b64, "prompt": prompt},
-            timeout=10
+            self._plan_url(),
+            json={"image": img_b64, "instruction": instruction},
+            timeout=20,
         )
         response.raise_for_status()
-        return response.json().get("response", "")
+        data = response.json()
+
+        mode_str = str(data.get("mode", "")).lower()
+        if mode_str.startswith("nav"):
+            mode = TaskMode.NAVIGATION
+        elif mode_str.startswith("manip"):
+            mode = TaskMode.MANIPULATION
+        else:
+            mode = TaskMode.IDLE
+
+        target = data.get("target", None)
+        confidence = float(data.get("confidence", 1.0))
+        reasoning = data.get("reasoning", None)
+
+        return PlannerOutput(
+            mode=mode,
+            subgoal=str(data.get("subgoal", "")),
+            target_object=str(target) if target and mode == TaskMode.MANIPULATION else None,
+            target_location=str(target) if target and mode == TaskMode.NAVIGATION else None,
+            confidence=confidence,
+            reasoning=str(reasoning) if reasoning is not None else None,
+        )
 
     def _call_local(self, image: np.ndarray, instruction: str) -> str:
-        """Run local VLM inference."""
         import torch
         
         pil_image = Image.fromarray(image)
@@ -214,11 +212,6 @@ Examples:
         return response
 
     def plan(self, observation: VLAObservation) -> PlannerOutput:
-        """
-        Generate high-level plan from observation.
-        
-        Returns cached result if called too frequently (rate limiting).
-        """
         current_time = time.time()
         if current_time - self._last_plan_time < self._min_plan_interval:
             if self._cached_output:
@@ -232,79 +225,14 @@ Examples:
             image = (image * 255).astype(np.uint8)
         
         if self._server_url:
-            response = self._call_server(image, observation.instruction)
+            self._cached_output = self._call_server(image, observation.instruction)
         else:
             if not self._loaded:
                 self.load()
             response = self._call_local(image, observation.instruction)
-        
-        self._cached_output = self._parse_response(response)
+
+            self._cached_output = self._parse_response(response)
+
         return self._cached_output
 
-
-class VLMPlannerServer:
-    """HTTP server wrapper for VLM planner (for containerized deployment)."""
-    
-    def __init__(self, planner: VLMPlanner, host: str = "0.0.0.0", port: int = 5600):
-        self._planner = planner
-        self._host = host
-        self._port = port
-
-    def run(self):
-        """Start HTTP server."""
-        from http.server import HTTPServer, BaseHTTPRequestHandler
-        import json
-        import base64
-        
-        planner = self._planner
-        
-        class Handler(BaseHTTPRequestHandler):
-            def do_POST(self):
-                if self.path == "/plan":
-                    content_length = int(self.headers['Content-Length'])
-                    post_data = self.rfile.read(content_length)
-                    data = json.loads(post_data)
-                    
-                    img_b64 = data.get("image", "")
-                    instruction = data.get("instruction", "")
-                    
-                    img_bytes = base64.b64decode(img_b64)
-                    image = np.array(Image.open(BytesIO(img_bytes)))
-                    
-                    obs = VLAObservation(
-                        rgb_image=image,
-                        depth_image=np.zeros((256, 256)),
-                        instruction=instruction,
-                        proprioception=np.zeros(8)
-                    )
-                    
-                    result = planner.plan(obs)
-                    
-                    response = {
-                        "mode": result.mode.value,
-                        "subgoal": result.subgoal,
-                        "target": result.target_object or result.target_location,
-                        "reasoning": result.reasoning
-                    }
-                    
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps(response).encode())
-                
-                elif self.path == "/health":
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(b'{"status": "ok"}')
-            
-            def do_GET(self):
-                if self.path == "/health":
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(b'{"status": "ok"}')
-        
-        server = HTTPServer((self._host, self._port), Handler)
-        print(f"VLM Planner server running on {self._host}:{self._port}")
-        server.serve_forever()
+#need a http server for container based deploys. 

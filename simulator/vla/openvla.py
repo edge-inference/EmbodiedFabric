@@ -1,13 +1,4 @@
-"""
-OpenVLA Integration
-
-Real VLA model integration using OpenVLA.
-https://openvla.github.io/
-
-Requirements:
-    pip install transformers torch
-    # Model weights downloaded on first use
-"""
+"""OpenVLA wrapper."""
 
 import time
 import logging
@@ -20,14 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class OpenVLAModel(VLAInterface):
-    """
-    OpenVLA model integration.
-    
-    OpenVLA is an open-source Vision-Language-Action model trained on
-    the Open X-Embodiment dataset.
-    
-    This provides REAL inference for accurate workload profiling.
-    """
+    """OpenVLA model wrapper for profiling."""
     
     MODEL_ID = "openvla/openvla-7b"
     

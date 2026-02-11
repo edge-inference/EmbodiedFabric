@@ -1,9 +1,4 @@
-"""
-Physics Backends
-
-- TDW (ThreeDWorld) - CPU-based physics, works everywhere
-- Isaac Sim - GPU-accelerated physics/rendering (requires NVIDIA GPU)
-"""
+"""Physics backends."""
 
 from .base import PhysicsBackend, RobotObservation, RobotCommand
 from .tdw_backend import TDWBackend

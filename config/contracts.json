@@ -1,0 +1,96 @@
+{
+  "example_1": {
+    "ambient_light_lux_min": 50,
+    "camera_fps_min": 28,
+    "detection_confidence_min": 0.8,
+    "perception_latency_ms_max": 50,
+    "trace": [
+      {
+        "camera_status": "OPERATIONAL",
+        "ambient_light_lux": 100,
+        "camera_fps": 30,
+        "detection_confidence": 0.9,
+        "perception_latency_ms": 30
+      },
+      {
+        "camera_status": "OPERATIONAL",
+        "ambient_light_lux": 100,
+        "camera_fps": 30,
+        "detection_confidence": 0.7,
+        "perception_latency_ms": 30
+      },
+      {
+        "camera_status": "DEGRADED",
+        "ambient_light_lux": 20,
+        "camera_fps": 15,
+        "detection_confidence": 0.5,
+        "perception_latency_ms": 100
+      }
+    ]
+  },
+  "example_2": {
+    "sensor": {
+      "name": "rgb_camera_timing",
+      "sensor_period_ms": 33.33,
+      "sensor_jitter_ms": 1.0,
+      "processing_latency_ms": 10.0,
+      "output_period_ms": 33.33
+    },
+    "control_loop": {
+      "name": "motion_control_timing",
+      "sensing_latency_ms": 15.0,
+      "computation_latency_ms": 5.0,
+      "actuation_latency_ms": 10.0,
+      "loop_period_ms": 50.0
+    },
+    "gossip": {
+      "name": "dsm_gossip_timing",
+      "gossip_period_ms": 50.0,
+      "propagation_hops": 3,
+      "per_hop_delay_ms": 5.0,
+      "convergence_probability": 0.99
+    }
+  },
+  "example_3": {
+    "collision": {
+      "name": "amr_collision_safety",
+      "min_distance_m": 0.5,
+      "max_velocity_mps": 1.0,
+      "reaction_time_ms": 100.0
+    },
+    "manipulation": {
+      "name": "gripper_safety",
+      "max_grip_force_n": 50.0,
+      "max_payload_kg": 5.0,
+      "workspace_bounds": {
+        "x": [-1.0, 1.0],
+        "y": [-1.0, 1.0],
+        "z": [0.0, 1.5]
+      }
+    }
+  },
+  "example_4": {
+    "rgb_camera": {
+      "name": "front_camera",
+      "resolution": [640, 480],
+      "fps": 30.0,
+      "fov_degrees": 90.0,
+      "latency_ms": 10.0
+    },
+    "depth_camera": {
+      "name": "depth_sensor",
+      "resolution": [640, 480],
+      "fps": 30.0,
+      "min_range_m": 0.3,
+      "max_range_m": 10.0,
+      "latency_ms": 15.0
+    },
+    "mobile_base": {
+      "name": "amr_base",
+      "max_linear_velocity_mps": 1.0,
+      "max_angular_velocity_rps": 2.0,
+      "control_rate_hz": 20.0
+    }
+  }
+}
+

@@ -1,9 +1,4 @@
-"""
-Profiled VLA Wrapper
-
-Wraps a real VLA model and profiles its performance.
-Used with TDW to get actual compute requirements for hardware sizing.
-"""
+"""Profiling wrapper around a VLAInterface."""
 
 import time
 
@@ -11,16 +6,7 @@ from .interface import VLAInterface, VLAObservation, VLAAction, VLAMetrics
 
 
 class ProfiledVLA(VLAInterface):
-    """
-    Profiling wrapper for VLA models.
-    
-    Measures:
-    - Inference latency
-    - Memory usage
-    - FLOPS (estimated)
-    
-    Use this to get real workload data for R3 hardware sizing.
-    """
+    """Tracks latency budget violations and aggregates timing stats."""
     
     def __init__(self, 
                  model: VLAInterface,
@@ -36,7 +22,6 @@ class ProfiledVLA(VLAInterface):
         self._last_metrics = VLAMetrics()
     
     def predict(self, observation: VLAObservation) -> VLAAction:
-        """Run inference with profiling"""
         start = time.perf_counter()
         
         action = self._model.predict(observation)
@@ -64,7 +49,6 @@ class ProfiledVLA(VLAInterface):
         return self._last_metrics
     
     def get_profiling_summary(self) -> dict:
-        """Get summary of all profiled data"""
         avg_latency = self._total_latency_ms / max(self._total_inferences, 1)
         violation_rate = self._violations / max(self._total_inferences, 1)
         
@@ -82,7 +66,6 @@ class ProfiledVLA(VLAInterface):
         self._model.reset()
     
     def reset_profiling(self) -> None:
-        """Reset profiling counters"""
         self._total_inferences = 0
         self._total_latency_ms = 0.0
         self._max_latency_ms = 0.0

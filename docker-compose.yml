@@ -171,28 +171,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
-
-  # Optional: Run simulation in container too
-  # Uncomment to use containerized TDW
-  # simulator:
-  #   build:
-  #     context: .
-  #     dockerfile: docker/simulator/Dockerfile
-  #   container_name: physicai-sim
-  #   depends_on:
-  #     cogact:
-  #       condition: service_healthy
-  #   environment:
-  #     - COGACT_SERVER_URL=http://cogact:5500/act_batch
-  #     - NVIDIA_VISIBLE_DEVICES=1
-  #     - DISPLAY=:99
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             device_ids: ["1"]
-  #             capabilities: [gpu]
-  #   volumes:
-  #     - ./recordings:/app/recordings
-  #     - ./results:/app/results

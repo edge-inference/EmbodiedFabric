@@ -1,8 +1,4 @@
-"""
-Physics Backend Base Class
-
-Abstract interface for physics engines.
-"""
+"""Physics backend interface used by the simulator."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -12,7 +8,6 @@ import numpy as np
 
 @dataclass
 class RobotObservation:
-    """Sensor observation from a robot"""
     robot_id: str
     timestamp: float
     rgb: np.ndarray                              # (H, W, 3) uint8
@@ -25,14 +20,12 @@ class RobotObservation:
 
 
 class ControlMode:
-    """Control mode for robot commands"""
     HIGH_LEVEL = "high_level"   # Abstract: move_by, turn_by, grasp
     LOW_LEVEL = "low_level"     # Direct: joint velocities/positions
 
 
 @dataclass
 class RobotCommand:
-    """Command to send to a robot"""
     robot_id: str
     linear_velocity: Tuple[float, float, float] = (0.0, 0.0, 0.0)
     angular_velocity: Tuple[float, float, float] = (0.0, 0.0, 0.0)
@@ -44,25 +37,18 @@ class RobotCommand:
 
 
 class PhysicsBackend(ABC):
-    """
-    Abstract physics backend interface.
-    
-    Implementations: TDW, Isaac Sim, MuJoCo, Mock
-    """
+    """Backend API for stepping, observing, and commanding robots."""
     
     @abstractmethod
     def initialize(self) -> bool:
-        """Initialize the physics engine"""
         pass
     
     @abstractmethod
     def reset(self, seed: Optional[int] = None) -> None:
-        """Reset the environment"""
         pass
     
     @abstractmethod
     def step(self) -> None:
-        """Advance physics by one timestep"""
         pass
     
     @abstractmethod
@@ -70,17 +56,14 @@ class PhysicsBackend(ABC):
                     robot_id: str,
                     position: Tuple[float, float, float],
                     robot_type: str = "amr") -> bool:
-        """Spawn a robot in the environment"""
         pass
     
     @abstractmethod
     def get_observation(self, robot_id: str) -> RobotObservation:
-        """Get sensor observation for a robot"""
         pass
     
     @abstractmethod
     def send_command(self, command: RobotCommand) -> bool:
-        """Send control command to a robot"""
         pass
     
     @abstractmethod
@@ -88,27 +71,22 @@ class PhysicsBackend(ABC):
                      object_id: str,
                      object_type: str,
                      position: Tuple[float, float, float]) -> bool:
-        """Spawn an object in the environment"""
         pass
     
     @abstractmethod
     def get_object_position(self, object_id: str) -> Optional[Tuple[float, float, float]]:
-        """Get object position"""
         pass
     
     @abstractmethod
     def close(self) -> None:
-        """Cleanup and close the backend"""
         pass
     
     @property
     @abstractmethod
     def sim_time(self) -> float:
-        """Current simulation time in seconds"""
         pass
     
     @property
     @abstractmethod
     def backend_name(self) -> str:
-        """Name of the backend"""
         pass

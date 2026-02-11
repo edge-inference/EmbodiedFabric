@@ -1,8 +1,4 @@
-"""
-VLA-Driven Robot Agent
-
-robot with VLA inference for decision making.
-"""
+"""Robot wrapper that runs a VLA model and emits backend commands."""
 
 from typing import Dict, Any, Optional, Tuple
 import numpy as np
@@ -16,19 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class VLAAgent(RobotAgent):
-    """
-    Robot agent driven by VLA model.
-    
-    Pipeline:
-    1. Check if robot is idle (previous action complete)
-    2. Get sensor observation from TDW physics backend
-    3. Build VLA input (vision + language + DSM context)
-    4. Run VLA inference
-    5. Execute predicted action (non-blocking)
-    6. Update DSM with new state
-    
-    Magnebot actions are non-blocking. 
-    """
+    """Runs VLA inference and applies the action each step."""
     
     def __init__(self,
                  robot_id: str,
@@ -58,11 +42,6 @@ class VLAAgent(RobotAgent):
         self._waiting_for_action = False
     
     def step(self, coordinator, dsm, profiler) -> None:
-        """
-        Execute one VLA-driven step (single-robot inference).
-        
-        Only runs VLA inference when robot is idle (no pending action).
-        """
         bundle = self.build_vla_observation(coordinator, dsm)
         if bundle is None:
             return
@@ -74,32 +53,26 @@ class VLAAgent(RobotAgent):
         self.apply_vla_action(action, backend_obs, vla_obs, profiler, dsm)
 
     def build_vla_observation(self, coordinator, dsm):
-        """Build VLA observation for batching or single inference."""
         self._metrics['total_steps'] += 1
         self._step_counter += 1
         
-        # Check if robot is busy with a previous action
         if self._waiting_for_action:
             if hasattr(self._backend, 'is_robot_idle') and not self._backend.is_robot_idle(self.robot_id):
                 return None
             self._waiting_for_action = False
         
-        # Throttle VLA inference
         if (self._step_counter % self._inference_interval) != 0:
             return None
         
-        # Get observation from TDW
         try:
             backend_obs = self._backend.get_observation(self.robot_id)
             self._position = backend_obs.position
         except Exception as e:
-            logger.warning(f"Failed to get observation for {self.robot_id}: {e}")
+            logger.warning("Failed to get observation for %s: %s", self.robot_id, e)
             return None
         
-        # Build context from DSM and coordinator
         context = self._build_context(coordinator, dsm)
         
-        # Prepare VLA input
         vla_obs = VLAObservation(
             rgb_image=backend_obs.rgb,
             depth_image=backend_obs.depth,
@@ -115,8 +88,6 @@ class VLAAgent(RobotAgent):
         return backend_obs, vla_obs
 
     def apply_vla_action(self, action, backend_obs, vla_obs, profiler, dsm) -> None:
-        """Apply a VLA action and record metrics."""
-        # Record VLA metrics
         vla_metrics = self._vla.get_metrics()
         if profiler:
             profiler.record_compute_event(
@@ -131,16 +102,17 @@ class VLAAgent(RobotAgent):
                     budget=self._vla_latency_budget_ms
                 )
         
-        # Log VLA action prediction (DEBUG purpo)
         logger.debug(
-            f"[{self.robot_id}] VLA ACTION: "
-            f"base_vel=({action.base_velocity[0]:.3f}, {action.base_velocity[1]:.3f}) "
-            f"gripper={action.gripper_action:.2f} "
-            f"done={action.done} "
-            f"pos=({backend_obs.position[0]:.2f}, {backend_obs.position[2]:.2f})"
+            "[%s] VLA action base=(%.3f, %.3f) grip=%.2f done=%s pos=(%.2f, %.2f)",
+            self.robot_id,
+            action.base_velocity[0],
+            action.base_velocity[1],
+            action.gripper_action,
+            action.done,
+            backend_obs.position[0],
+            backend_obs.position[2],
         )
         
-        # Convert VLA action to robot command
         control_mode = getattr(action, 'control_mode', 'high_level')
         joint_vels = getattr(action, 'joint_velocities', None)
         joint_pos = getattr(action, 'joint_positions', None)
@@ -156,12 +128,10 @@ class VLAAgent(RobotAgent):
             joint_positions=joint_pos
         )
         
-        # Send command (non-blocking)
         if self._backend.send_command(command):
             self._waiting_for_action = True
-            logger.debug(f"[{self.robot_id}] Command sent, waiting for action to complete")
+            logger.debug("[%s] Command sent", self.robot_id)
         
-        # Update DSM with current state
         if dsm:
             dsm.write_agent_state(
                 agent_id=self.robot_id,
@@ -170,14 +140,12 @@ class VLAAgent(RobotAgent):
                 task_id=self._current_task.get('id') if self._current_task else None
             )
         
-        # Update internal state and history
         self._update_state(action)
         self._observation_history.append(vla_obs)
         if len(self._observation_history) > self._max_history * 2:
             self._observation_history = self._observation_history[-self._max_history:]
     
     def _build_context(self, coordinator, dsm) -> Dict[str, Any]:
-        """Build context for VLA from DSM and coordinator"""
         context = {}
         
         if dsm:
@@ -197,7 +165,6 @@ class VLAAgent(RobotAgent):
         return context
     
     def _update_state(self, action) -> None:
-        """Update robot state based on action"""
         if action.done:
             if self._current_task:
                 self._metrics['tasks_completed'] += 1
@@ -214,7 +181,6 @@ class VLAAgent(RobotAgent):
             self._state = RobotState.WAITING
     
     def assign_task(self, task: Dict[str, Any]) -> bool:
-        """Assign task to this robot"""
         if self._current_task is not None:
             return False
         
@@ -229,7 +195,6 @@ class VLAAgent(RobotAgent):
         return True
     
     def get_status(self) -> RobotStatus:
-        """Get current robot status"""
         return RobotStatus(
             robot_id=self.robot_id,
             state=self._state,
@@ -239,5 +204,12 @@ class VLAAgent(RobotAgent):
     
     @property
     def vla_metrics(self):
-        """Get VLA performance metrics"""
         return self._vla.get_metrics()
+
+    @property
+    def vla(self):
+        return self._vla
+
+    @property
+    def position(self) -> Tuple[float, float, float]:
+        return self._position

@@ -1,12 +1,7 @@
-"""
-Simulator Core
-
-Main entry point for the unified simulator.
-Orchestrates TDW physics backend, VLA robots, and coordination.
-"""
+"""Simulator orchestration for multi-robot VLA experiments."""
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 import logging
 import time
 
@@ -15,45 +10,40 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SimulatorConfig:
-    """Simulator configuration"""
-    
     n_robots: int = 5
     
     scene_id: str = "warehouse_default"
     scene_name: Optional[str] = None              
     scene_size: tuple = (20, 20)                  
     floorplan_layout: Optional[int] = None
+    spawn_positions: Optional[List[Tuple[float, float, float]]] = None
     
-    vla_model: str = "openvla"                    # "vla" or "profiled"
-    vla_latency_budget_ms: float = 100.0          # Realistic budget for 7B model
-    vla_quantization: str = "4bit"                # For BlockDialect R3
+    vla_model: str = "openvla"
+    vla_latency_budget_ms: float = 100.0
+    vla_quantization: str = "4bit"
     
-    enable_dsm: bool = True                       # Distributed shared memory
+    enable_dsm: bool = True
     gossip_period_ms: float = 50.0
     
-    enable_lf_coordination: bool = True           # Lingua Franca control plane
+    enable_lf_coordination: bool = True
     
-    time_step: float = 0.02                       # 50Hz physics
+    time_step: float = 0.02
     max_steps: int = 10000
     
     seed: Optional[int] = None
     
     profiling_enabled: bool = True
     
-    # VLA control
-    inference_interval: int = 1                 # Run VLA every N steps
-    demo_instruction: Optional[str] = None      # Override instruction (demo)
-    
-    # Video recording
-    enable_recording: bool = False                # Record video of simulation
-    recording_path: str = "recordings"            # Path to save recordings
-    recording_resolution: tuple = (1280, 720)     # Video resolution (width, height)
-    recording_view: str = "overhead"             # overhead, angled, side
-    
-    # Backend selection
-    backend: str = "tdw"                          # "tdw" or "isaac"
-    
-    # TDW connection (persistent server mode)
+    inference_interval: int = 1
+    demo_instruction: Optional[str] = None
+
+    enable_recording: bool = False
+    recording_path: str = "recordings"
+    recording_resolution: tuple = (1280, 720)
+    recording_view: str = "overhead"
+
+    backend: str = "tdw"
+
     tdw_launch_build: bool = True                 
     tdw_address: str = "localhost"                
     tdw_port: int = 1071                         
@@ -74,15 +64,7 @@ class SimulatorState:
 
 
 class Simulator:
-    """
-    Unified simulator for PhysicAI research.
-    
-    Integrates:
-    - TDW physics backend (real physics)
-    - OpenVLA inference (real VLA)
-    - Multi-robot coordination (DSM + LF)
-    - Workload profiling for hardware sizing
-    """
+    """Batched multi-robot loop: obs -> VLA -> actions -> metrics."""
     
     def __init__(self, config: SimulatorConfig):
         self.config = config
@@ -97,7 +79,6 @@ class Simulator:
         self._initialized = False
     
     def initialize(self) -> bool:
-        """Initialize all simulator components"""
         logger.info(f"Initializing simulator: robots={self.config.n_robots}, "
                    f"vla={self.config.vla_model}, backend={self.config.backend}")
         
@@ -151,30 +132,31 @@ class Simulator:
         return True
     
     def _create_robots(self):
-        """Create VLA-driven robot instances and spawn them in TDW"""
+        """Spawn robots and wrap them with VLAAgent."""
         from .robot.vla_agent import VLAAgent
         import math
         
-        # Calculate spawn positions in a grid pattern
         grid_size = math.ceil(math.sqrt(self.config.n_robots))
         spacing = min(self.config.scene_size) / (grid_size + 1)
+
+        spawn_positions = list(self.config.spawn_positions or [])
         
         for i in range(self.config.n_robots):
             robot_id = f"robot_{i}"
             
-            # Grid position (centered in scene)
-            row = i // grid_size
-            col = i % grid_size
-            x = (col + 1) * spacing - self.config.scene_size[0] / 2
-            z = (row + 1) * spacing - self.config.scene_size[1] / 2
-            position = (x, 0.0, z)
+            if i < len(spawn_positions):
+                position = spawn_positions[i]
+            else:
+                row = i // grid_size
+                col = i % grid_size
+                x = (col + 1) * spacing - self.config.scene_size[0] / 2
+                z = (row + 1) * spacing - self.config.scene_size[1] / 2
+                position = (x, 0.0, z)
             
-            # Spawn in TDW first
             if not self._backend.spawn_robot(robot_id, position):
-                logger.error(f"Failed to spawn robot {robot_id} in TDW")
+                logger.error("Failed to spawn robot %s", robot_id)
                 continue
             
-            # Create VLA agent wrapper
             robot = VLAAgent(
                 robot_id=robot_id,
                 backend=self._backend,
@@ -187,21 +169,18 @@ class Simulator:
             
             self._robots[robot_id] = robot
         
-        logger.info(f"Created {len(self._robots)} VLA-driven robots in TDW")
+        logger.info("Created %d VLA-driven robots", len(self._robots))
     
     def step(self) -> SimulatorState:
-        """Execute one simulation step"""
         if not self._initialized:
             raise RuntimeError("Simulator not initialized")
         
         step_start = time.perf_counter()
         
-        # Advance physics first so sensors are updated for this step
         self._backend.step()
         
         self._coordinator.step()
         
-        # Batch: collect all observations, run inference, apply actions
         batch_obs = []
         batch_agents = []
         for robot in self._robots.values():
@@ -213,7 +192,7 @@ class Simulator:
             batch_agents.append((robot, backend_obs, vla_obs))
         
         if batch_obs:
-            vla_model = batch_agents[0][0]._vla
+            vla_model = batch_agents[0][0].vla
             if hasattr(vla_model, "predict_batch"):
                 actions = vla_model.predict_batch(batch_obs)
             else:
@@ -237,7 +216,6 @@ class Simulator:
         return self.state
     
     def run(self, steps: Optional[int] = None, callback=None) -> SimulatorState:
-        """Run simulation for specified steps"""
         max_steps = steps or self.config.max_steps
         
         logger.info(f"Running simulation for {max_steps} steps")
@@ -256,11 +234,10 @@ class Simulator:
                 logger.info(f"Step {step}: sim_time={self.state.sim_time:.2f}s, "
                            f"RTF={rtf:.2f}x")
             
-            # Verbose: log robot positions every 50 steps
             if self.config.verbose and step % 50 == 0:
                 positions = []
                 for rid, robot in self._robots.items():
-                    pos = robot._position
+                    pos = robot.position
                     positions.append(f"{rid}=({pos[0]:.2f},{pos[2]:.2f})")
                 logger.debug(f"[Step {step}] Positions: {', '.join(positions)}")
         
@@ -270,13 +247,11 @@ class Simulator:
         return self.state
     
     def get_metrics(self):
-        """Get profiled metrics"""
         if self._profiler:
             return self._profiler.get_metrics()
         return None
     
     def close(self):
-        """Cleanup simulator resources"""
         if self._backend:
             self._backend.close()
         self._initialized = False

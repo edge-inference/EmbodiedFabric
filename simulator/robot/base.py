@@ -1,8 +1,4 @@
-"""
-Robot Agent Base Class
-
-Abstract base for all robot types.
-"""
+"""Robot agent base types."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -11,7 +7,6 @@ from enum import Enum
 
 
 class RobotState(Enum):
-    """Robot state machine states"""
     IDLE = "idle"
     NAVIGATING = "navigating"
     MANIPULATING = "manipulating"
@@ -21,7 +16,6 @@ class RobotState(Enum):
 
 @dataclass
 class RobotStatus:
-    """Current robot status"""
     robot_id: str
     state: RobotState
     position: Tuple[float, float, float]
@@ -31,13 +25,7 @@ class RobotStatus:
 
 
 class RobotAgent(ABC):
-    """
-    Abstract robot agent.
-    
-    All robots must implement:
-    - step(): Main update loop
-    - get_status(): Current state
-    """
+    """Abstract robot agent."""
     
     def __init__(self, robot_id: str, backend):
         self.robot_id = robot_id
@@ -52,17 +40,14 @@ class RobotAgent(ABC):
     
     @abstractmethod
     def step(self, coordinator, dsm, profiler) -> None:
-        """Execute one agent step"""
         pass
     
     @abstractmethod
     def assign_task(self, task: Dict[str, Any]) -> bool:
-        """Assign a task to this robot"""
         pass
     
     @abstractmethod
     def get_status(self) -> RobotStatus:
-        """Get current robot status"""
         pass
     
     @property

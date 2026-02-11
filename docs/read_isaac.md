@@ -28,13 +28,13 @@ Choose asset pack based on your needs:
 
 ```bash
 # Option A: Minimal (Robots only, ~5GB)
-bash scripts/download_isaac_assets.sh minimal
+bash scripts/download/isaac_assets.sh minimal
 
 # Option B: Standard (Robots + Environments, ~15GB) - Recommended
-bash scripts/download_isaac_assets.sh standard
+bash scripts/download/isaac_assets.sh standard
 
 # Option C: Complete (Everything, ~50GB+)
-bash scripts/download_isaac_assets.sh complete
+bash scripts/download/isaac_assets.sh complete
 ```
 
 Assets are installed to: `~/.local/share/ov/pkg/isaac-sim-5.1.0/isaac-sim-assets`
@@ -132,7 +132,7 @@ echo $ISAAC_ASSETS_PATH
 ls $ISAAC_ASSETS_PATH/Isaac/Robots/Fetch/
 
 # If missing, rerun download script
-bash scripts/download_isaac_assets.sh standard
+bash scripts/download/isaac_assets.sh standard
 ```
 
 ### GPU/CUDA Issues

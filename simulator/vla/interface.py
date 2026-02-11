@@ -1,8 +1,4 @@
-"""
-VLA Interface
-
-Abstract interface for Vision-Language-Action models.
-"""
+"""VLA model interface + factory."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -12,15 +8,7 @@ import numpy as np
 
 @dataclass
 class VLAObservation:
-    """
-    Input to VLA model.
-    
-    Combines:
-    - Visual input (RGB, depth)
-    - Language instruction
-    - Proprioceptive state
-    - Context from DSM (neighbor states, shared knowledge)
-    """
+    """Input to a VLA model."""
     rgb_image: np.ndarray                        # (H, W, 3) uint8
     depth_image: np.ndarray                      # (H, W) float32, meters
     instruction: str                             # Natural language task
@@ -32,18 +20,7 @@ class VLAObservation:
 
 @dataclass
 class VLAAction:
-    """
-    Output from VLA model.
-    
-    Actions can be:
-    - Continuous (velocity commands)
-    - Discrete (grasp/release)
-    - Hybrid (move to position, then grasp)
-    
-    Control modes:
-    - high_level: Abstract commands (move_by, grasp)
-    - low_level: Direct joint control
-    """
+    """Output from a VLA model."""
     base_velocity: Tuple[float, float] = (0.0, 0.0)    # (linear m/s, angular rad/s)
     arm_action: Optional[np.ndarray] = None             # Joint deltas or EE target
     gripper_action: float = 0.5                         # 0=open, 1=closed
@@ -68,25 +45,10 @@ class VLAMetrics:
 
 
 class VLAInterface(ABC):
-    """
-    Abstract VLA interface.
-    
-    All VLA implementations must provide:
-    - predict(): Run inference
-    - get_metrics(): Return profiling data
-    """
+    """Common VLA API used by the simulator."""
     
     @abstractmethod
     def predict(self, observation: VLAObservation) -> VLAAction:
-        """
-        Run VLA inference.
-        
-        Args:
-            observation: Sensor + language + context input
-            
-        Returns:
-            Action to execute
-        """
         pass
     
     @abstractmethod
@@ -96,13 +58,11 @@ class VLAInterface(ABC):
     
     @abstractmethod
     def reset(self) -> None:
-        """Reset internal state (for new episode)"""
         pass
     
     @property
     @abstractmethod
     def model_name(self) -> str:
-        """Name of the VLA model"""
         pass
     
     @property
@@ -116,7 +76,7 @@ _VLA_CACHE: Dict[str, VLAInterface] = {}
 
 
 def _cache_key(model_name: str, kwargs: Dict[str, Any]) -> str:
-    """Create a stable cache key for VLA models."""
+    """cache key for VLA models."""
     if model_name == "openvla":
         quant = kwargs.get("quantization", "4bit")
         latency = kwargs.get("latency_budget_ms", 100.0)

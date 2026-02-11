@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""
-LeRobot VLA Server
-
-Serves SmolVLA, Pi0, or GR00T as end-to-end VLA for robot control.
-Takes image + instruction, returns joint velocities/positions.
-
-Usage:
-    python lerobot_server.py --model smolvla --port 5700
-    python lerobot_server.py --model pi0 --port 5700
-    python lerobot_server.py --model groot --port 5700
-"""
+"""Serve a LeRobot-backed VLA over HTTP."""
 
 import sys
 import os

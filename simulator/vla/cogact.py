@@ -1,9 +1,4 @@
-"""
-CogACT VLA Integration
-
-Uses Microsoft CogACT (DiT action module) for batched inference.
-Repo: https://github.com/microsoft/CogACT
-"""
+"""CogACT wrapper."""
 
 from typing import List, Optional
 import os

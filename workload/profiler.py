@@ -1,7 +1,6 @@
 """
 Workload Profiler
 
-Collects metrics during simulation for hardware sizing (R2/R3).
 """
 
 from dataclasses import dataclass, field
@@ -15,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ComputeEvent:
-    """Single compute event"""
     event_type: str
     flops: float
     duration_ms: float
@@ -24,7 +22,6 @@ class ComputeEvent:
 
 @dataclass
 class ContractViolation:
-    """Contract violation record"""
     contract: str
     actual: float
     budget: float
@@ -33,7 +30,6 @@ class ContractViolation:
 
 @dataclass
 class WorkloadMetrics:
-    """Aggregated workload metrics"""
     duration_seconds: float = 0.0
     total_steps: int = 0
     
@@ -58,11 +54,6 @@ class WorkloadMetrics:
 
 
 class WorkloadProfiler:
-    """
-    Collects workload metrics during simulation.
-    
-    Feeds into hardware sizing for R3.
-    """
     
     def __init__(self):
         self._recording = False
@@ -76,19 +67,16 @@ class WorkloadProfiler:
         self._sensor_bytes = 0
     
     def start_recording(self) -> None:
-        """Start recording metrics"""
         self._recording = True
         self._start_time = time.time()
         self._reset()
         logger.info("Workload profiler started")
     
     def stop_recording(self) -> None:
-        """Stop recording metrics"""
         self._recording = False
         logger.info("Workload profiler stopped")
     
     def _reset(self) -> None:
-        """Reset all counters"""
         self._step_count = 0
         self._compute_events.clear()
         self._violations.clear()
@@ -96,7 +84,6 @@ class WorkloadProfiler:
         self._sensor_bytes = 0
     
     def record_step(self, state: Any) -> None:
-        """Record a simulation step"""
         if not self._recording:
             return
         self._step_count += 1
@@ -105,7 +92,6 @@ class WorkloadProfiler:
                              event_type: str,
                              flops: float,
                              duration_ms: float) -> None:
-        """Record a compute event"""
         if not self._recording:
             return
         
@@ -123,7 +109,6 @@ class WorkloadProfiler:
                                   contract: str,
                                   actual: float,
                                   budget: float) -> None:
-        """Record a contract violation"""
         if not self._recording:
             return
         
@@ -135,7 +120,6 @@ class WorkloadProfiler:
         ))
     
     def record_sensor_data(self, sensor_id: str, bytes_count: int) -> None:
-        """Record sensor data generation"""
         if not self._recording:
             return
         self._sensor_bytes += bytes_count
@@ -170,7 +154,6 @@ class WorkloadProfiler:
         )
     
     def get_hardware_recommendations(self) -> Dict[str, Any]:
-        """Generate hardware recommendations from workload"""
         metrics = self.get_metrics()
         
         vla_tflops = metrics.vla_total_flops / 1e12
@@ -183,7 +166,7 @@ class WorkloadProfiler:
                 'vla_inference_rate_hz': vla_inference_rate,
                 'vla_avg_latency_ms': metrics.vla_avg_latency_ms,
                 'vla_violations': metrics.vla_violations,
-                'recommendation': 'Jetson Orin NX' if required_tops < 50 else 'Jetson AGX Orin'
+                'recommendation': 'ABCXYZ' if required_tops < 50 else 'ABCXYZ'
             },
             'memory': {
                 'vla_weights_gb': 5.0,
@@ -198,7 +181,6 @@ class WorkloadProfiler:
         }
     
     def export(self, path: str) -> None:
-        """Export metrics to file"""
         metrics = self.get_metrics()
         recommendations = self.get_hardware_recommendations()
         

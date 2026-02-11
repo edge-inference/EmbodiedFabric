@@ -1,8 +1,4 @@
-"""
-Task Management
-
-Task definitions and lifecycle management.
-"""
+"""Task definitions and lifecycle."""
 
 from dataclasses import dataclass, field
 from typing import Tuple, Optional, Dict, Any
@@ -11,7 +7,6 @@ import time
 
 
 class TaskStatus(Enum):
-    """Task lifecycle states"""
     AVAILABLE = "available"
     CLAIMED = "claimed"
     IN_PROGRESS = "in_progress"
@@ -21,7 +16,6 @@ class TaskStatus(Enum):
 
 
 class TaskType(Enum):
-    """Types of tasks"""
     TRANSPORT = "transport"
     PICK = "pick"
     PLACE = "place"
@@ -31,14 +25,7 @@ class TaskType(Enum):
 
 @dataclass
 class Task:
-    """
-    Task definition.
-    
-    Includes:
-    - Location and type
-    - Natural language instruction (for VLA)
-    - Timing and lifecycle
-    """
+    """Task definition."""
     task_id: str
     task_type: TaskType
     location: Tuple[float, float, float]

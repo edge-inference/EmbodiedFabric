@@ -5,3 +5,23 @@
 [submodule "extern/visualnav-transformer"]
 	path = extern/visualnav-transformer
 	url = https://github.com/robodhruv/visualnav-transformer.git
+[submodule "extern/CoELA"]
+	path = extern/CoELA
+	url = https://github.com/UMass-Embodied-AGI/CoELA.git
+[submodule "extern/Isaac-GR00T"]
+	path = extern/Isaac-GR00T
+	url = https://github.com/NVIDIA/Isaac-GR00T.git
+[submodule "extern/Isaac-GR00T-n1.6"]
+	path = extern/Isaac-GR00T-n1.6
+	url = https://github.com/NVIDIA/Isaac-GR00T.git
+	branch = main
+[submodule "extern/IsaacLab"]
+	path = extern/IsaacLab
+	url = https://github.com/isaac-sim/IsaacLab.git
+[submodule "extern/IsaacLab-Arena"]
+	path = extern/IsaacLab-Arena
+	url = https://github.com/isaac-sim/IsaacLab-Arena.git
+	branch = release/0.1.1
+[submodule "extern/lerobot"]
+	path = extern/lerobot
+	url = https://github.com/huggingface/lerobot.git

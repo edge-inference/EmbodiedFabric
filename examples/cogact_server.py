@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""
-CogACT Inference Server
-
-Keeps CogACT loaded in GPU and serves actions over HTTP.
-
-Usage:
-  export HF_TOKEN=hf_xxx
-  CUDA_VISIBLE_DEVICES=0 python examples/cogact_server.py --port 5500
-"""
+"""Serve CogACT actions over HTTP."""
 
 import argparse
 import json
@@ -15,9 +7,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
 from PIL import Image
-import json_numpy
+import json_numpy  # type: ignore[import-not-found]
 import torch
-from vla import load_vla
+from vla import load_vla  # type: ignore[import-not-found]
 
 
 class CogACTHandler(BaseHTTPRequestHandler):

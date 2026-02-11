@@ -1,9 +1,4 @@
-"""
-Fleet Coordinator
-
-Multi-robot task allocation and coordination.
-Integrates with Lingua Franca for deterministic coordination (optional).
-"""
+"""Task allocation and coordination across robots."""
 
 from typing import Dict, List, Any, Optional, Tuple
 import time
@@ -17,15 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class FleetCoordinator:
-    """
-    Fleet-level task coordination.
-    
-    Responsibilities:
-    - Task creation and lifecycle
-    - Task allocation (push or pull model)
-    - Lease management
-    - Integration with LF for determinism (optional)
-    """
+    """Fleet-level task coordinator."""
     
     def __init__(self,
                  n_robots: int,
@@ -52,11 +39,9 @@ class FleetCoordinator:
             self._init_lf_bridge()
     
     def _init_lf_bridge(self) -> None:
-        """Initialize Lingua Franca bridge for deterministic coordination"""
         logger.info("LF coordination enabled (placeholder)")
     
     def step(self) -> None:
-        """Execute one coordinator step"""
         self._step_count += 1
         
         self._generate_tasks()

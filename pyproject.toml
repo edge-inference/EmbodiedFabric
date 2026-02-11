@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+markers = [
+  "unit: fast unit tests",
+  "integration: slow tests requiring external simulators",
+  "tdw: requires tdw+magnebot",
+  "isaac: requires isaac sim",
+]
+

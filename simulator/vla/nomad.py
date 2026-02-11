@@ -1,28 +1,19 @@
-"""
-NoMaD Navigation Expert
-
-Diffusion-based goal-conditioned navigation policy.
-Repo: https://github.com/robodhruv/visualnav-transformer
-
-Outputs (v, omega) velocity commands at 5-10 Hz for mobile base navigation.
-"""
+"""NoMaD navigation wrapper."""
 
 from typing import List, Optional, Tuple
 import os
 import time
+import logging
 import numpy as np
 from PIL import Image
 
 from .interface import VLAInterface, VLAObservation, VLAAction, VLAMetrics
 
+logger = logging.getLogger(__name__)
+
 
 class NoMaDNavigator(VLAInterface):
-    """
-    NoMaD navigation expert wrapper.
-    
-    Uses diffusion policy to generate multimodal action distributions
-    for goal-directed navigation and exploration.
-    """
+    """Diffusion-based goal-conditioned navigation expert."""
 
     def __init__(self,
                  model_path: Optional[str] = None,
@@ -48,7 +39,6 @@ class NoMaDNavigator(VLAInterface):
         self._context_size = 5
 
     def load(self) -> bool:
-        """Load NoMaD model weights."""
         if self._loaded:
             return True
         
@@ -81,31 +71,25 @@ class NoMaDNavigator(VLAInterface):
                 checkpoint = torch.load(self._model_path, map_location=self._device)
                 state_dict = checkpoint.get("model_state_dict", checkpoint)
                 self._model.load_state_dict(state_dict, strict=False)
-                print(f"Loaded NoMaD weights from {self._model_path}")
+                logger.info("Loaded NoMaD weights: %s", self._model_path)
             else:
-                print(f"NoMaD weights not found at {self._model_path}")
-                print("Download from: https://drive.google.com/drive/folders/1a9yWR2iooXFAqjQHetz263--4_2FFggg")
+                logger.warning("NoMaD weights not found: %s", self._model_path)
             
             self._model.to(self._device).eval()
             self._loaded = True
             return True
             
         except ImportError as e:
-            print(f"NoMaD import failed: {e}")
-            print("Ensure extern/visualnav-transformer is cloned and dependencies installed")
+            logger.warning("NoMaD import failed: %s", e)
             return False
-        except Exception as e:
-            print(f"Failed to load NoMaD: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            logger.exception("Failed to load NoMaD")
             return False
 
     def set_goal(self, goal_image: np.ndarray) -> None:
-        """Set navigation goal as an image."""
         self._goal_image = goal_image
 
     def _preprocess_image(self, rgb: np.ndarray) -> 'torch.Tensor':
-        """Convert RGB image to model input format."""
         import torch
         from torchvision import transforms
         
@@ -124,7 +108,6 @@ class NoMaDNavigator(VLAInterface):
         return transform(pil_img).unsqueeze(0).to(self._device)
 
     def predict(self, observation: VLAObservation) -> VLAAction:
-        """Generate navigation action using diffusion policy."""
         if not self._loaded:
             if not self.load():
                 return VLAAction(done=True, confidence=0.0)
@@ -161,8 +144,8 @@ class NoMaDNavigator(VLAInterface):
             linear_vel = np.clip(linear_vel, -0.5, 0.5)
             angular_vel = np.clip(angular_vel, -1.0, 1.0)
             
-        except Exception as e:
-            print(f"NoMaD inference failed: {e}")
+        except Exception:
+            logger.exception("NoMaD inference failed")
             linear_vel, angular_vel = 0.0, 0.0
         
         latency_ms = (time.perf_counter() - start) * 1000
@@ -196,10 +179,7 @@ class NoMaDNavigator(VLAInterface):
 
 
 class MockNoMaDNavigator(VLAInterface):
-    """
-    Mock NoMaD for testing without actual model weights.
-    Generates plausible navigation commands based on simple heuristics.
-    """
+    """Simple heuristic navigator used when NoMaD isn't available."""
 
     def __init__(self, latency_budget_ms: float = 100.0):
         self._latency_budget_ms = latency_budget_ms

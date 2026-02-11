@@ -1,15 +1,4 @@
-"""
-Distributed Shared Memory (DSM)
-
-Gossip-based state sharing for multi-robot coordination.
-Reimplemented from Mesa with realistic timing.
-
-Key concepts:
-- Each robot maintains local cache of shared state
-- Gossip protocol propagates updates
-- Eventual consistency with bounded staleness
-- Context for VLA decision making (R1 integration)
-"""
+"""Gossip-based state sharing (DSM) for multi-robot context."""
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Any, Optional, Tuple, Set
@@ -22,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AgentState:
-    """State of an agent in DSM"""
     agent_id: str
     position: Tuple[float, float, float]
     state: str
@@ -35,7 +23,6 @@ class AgentState:
 
 @dataclass
 class SharedObservation:
-    """Shared sensor observation summary"""
     agent_id: str
     position: Tuple[float, float, float]
     detected_objects: List[Dict[str, Any]]
@@ -44,7 +31,6 @@ class SharedObservation:
 
 @dataclass
 class JamSignal:
-    """Traffic jam signal"""
     location: Tuple[float, float, float]
     severity: float  # 0-1
     reporter_id: str
@@ -52,15 +38,7 @@ class JamSignal:
 
 
 class LocalCache:
-    """
-    Local cache for a single agent.
-    
-    Stores:
-    - Agent states (positions, tasks)
-    - Shared observations
-    - Jam signals
-    - Path intents
-    """
+    """Per-agent cache of shared state."""
     
     def __init__(self, agent_id: str, max_aoi_ms: int = 3000):
         self.agent_id = agent_id

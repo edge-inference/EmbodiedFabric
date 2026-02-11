@@ -1,13 +1,4 @@
-"""
-Multi-Robot Coordination
-
-Reimplemented from Mesa learnings with proper physics integration.
-
-Components:
-- DSM: Distributed Shared Memory with gossip protocol
-- Fleet Coordinator: Task allocation with LF integration
-- Pathfinder: Collision-aware navigation (real obstacles)
-"""
+"""Coordination utilities (DSM + task allocator)."""
 
 from .dsm import DistributedSharedMemory
 from .fleet import FleetCoordinator

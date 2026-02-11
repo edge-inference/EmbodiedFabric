@@ -1,16 +1,5 @@
 #!/usr/bin/env python3
-"""
-VLM Planner Server
-
-Runs CogVLM2 as a high-level task planner for robot control.
-Analyzes images + instructions to decide NAV vs MANIP mode.
-
-Usage:
-    python vlm_planner_server.py --host 0.0.0.0 --port 5600
-    
-    # Or with specific model:
-    python vlm_planner_server.py --model THUDM/cogvlm2-llama3-chat-19B
-"""
+"""Run a local /plan server for VLMPlanner."""
 
 import sys
 import os
@@ -24,7 +13,8 @@ from io import BytesIO
 import numpy as np
 from PIL import Image
 
-from simulator.vla.vlm_planner import VLMPlanner, VLAObservation
+from simulator.vla.vlm_planner import VLMPlanner
+from simulator.vla.interface import VLAObservation
 
 
 def create_handler(planner: VLMPlanner):

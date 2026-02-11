@@ -12,61 +12,81 @@ Simulation framework for hardware-software co-design of embodied AI systems.
 
 ```
 physicai/
-├── contracts/                 # Formal A/G contracts for CPS design
-│   ├── formal/               # Assume-Guarantee contracts
-│   │   ├── contract.py       # Base contract definitions
-│   │   ├── timing.py         # Real-time timing contracts
-│   │   ├── safety.py         # Safety contracts
-│   │   ├── component.py      # Component specifications
-│   │   └── composition.py    # Contract composition rules
-│   └── ...
-│
-├── simulator/                 # Unified simulator
-│   ├── core.py               # Main simulator orchestration
-│   │
-│   ├── backend/              # Physics engines
-│   │   ├── base.py           # Backend interface
-│   │   ├── tdw_backend.py    # TDW (ThreeDWorld) integration
-│   │
-│   ├── robot/                # Robot implementations
-│   │   ├── base.py           # Robot interface
-│   │   ├── vla_agent.py      # VLA-driven robot (full pipeline)
-│   │
-│   ├── vla/                  # Vision-Language-Action models
-│   │   ├── interface.py      # VLA contract
-│   │   └── profiled_vla.py   # Profiling wrapper
-│   │
-│   ├── coordination/         # Multi-robot coordination (from R1)
-│   │   ├── dsm.py            # Distributed Shared Memory + gossip
-│   │   ├── fleet.py          # Task allocation
-│   │   └── task.py           # Task definitions
-│   │
-│   └── scenarios/            # Test scenarios
-│
-├── workload/                  # Profiling for hardware sizing (R2/R3)
-│   └── profiler.py           # Workload metrics collection
-│
-└── examples/                  # Usage examples
-    └── floorplan_4zone.py  # demo
+├── config/
+├── contracts/
+│   ├── sim/
+│   └── codesign/
+├── scripts/
+├── simulator/
+│   ├── core.py
+│   ├── backend/  (tdw/, isaac/)
+│   ├── robot/
+│   ├── vla/
+│   ├── coordination/
+│   └── scenarios/
+├── tests/
+├── workload/
+├── examples/
+└── extern/  (submodules)
 ```
+
+## Download / submodules
+
+```bash
+git submodule update --init --recursive
+```
+
+Submodules:
+
+| Path | Repo |
+|------|------|
+| `extern/CogACT` | microsoft/CogACT |
+| `extern/visualnav-transformer` | robodhruv/visualnav-transformer |
+| `extern/CoELA` | UMass-Embodied-AGI/CoELA |
+| `extern/Isaac-GR00T` | NVIDIA/Isaac-GR00T (n1.5 tag) |
+| `extern/Isaac-GR00T-n1.6` | NVIDIA/Isaac-GR00T (main / n1.6) |
+| `extern/IsaacLab` | isaac-sim/IsaacLab |
+| `extern/IsaacLab-Arena` | isaac-sim/IsaacLab-Arena (release/0.1.1) |
+| `extern/lerobot` | huggingface/lerobot |
+
+# Install deps
+pip install -r requirements.txt -r requirements-dev.txt
 
 ## Quick Start
 
 ```bash
-# Run with TDW (requires install)
 pip install tdw magnebot
 # Then change backend="tdw" in config
 
-cd physicai
-CUDA_VISIBLE_DEVICES=1 xvfb-run -a python examples/floorplan_4zone.py --robots 4
+# Unit tests
+python -m pytest -q
 
+cd physicai
+CUDA_VISIBLE_DEVICES=1 xvfb-run -a python examples/floorplan_4zone.py --robots 2
+
+
+# Contract demo (uses config/contracts.json)
+python examples/contracts.py
 ```
+
+## Isaac Sim backend
+
+Install Isaac Sim from NVIDIA docs: [Installation](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/index.html).
+
+
+```bash
+python -c "import isaacsim; print('isaacsim OK')"
+```
+
+## Robot eval scripts (run in ubuntu desktop with an NVIDIA GPU having RT cores)
+
+See `scripts/setup/` and `scripts/eval/` for GR00T / Isaac Lab Arena runs.
 
 ## Key Concepts
 
 ### 1. VLA Integration
 
-Every robot runs a VLA (Vision-Language-Action) model:
+Every robot runs a VLA model:
 
 ```python
 # VLA pipeline
