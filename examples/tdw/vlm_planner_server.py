@@ -86,7 +86,7 @@ def main():
     parser.add_argument("--model", default="THUDM/cogvlm2-llama3-chat-19B",
                        help="HuggingFace model ID")
     parser.add_argument("--no-4bit", action="store_true", 
-                       help="Disable 4-bit quantization (uses more VRAM)")
+                       help="Disable 4-bit quantization")
     parser.add_argument("--device", default="cuda:0", help="CUDA device")
     args = parser.parse_args()
     
