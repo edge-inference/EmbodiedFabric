@@ -4,7 +4,7 @@ Simulation framework for hardware-software co-design of embodied AI systems.
 
 ## Research Problems
 
-- **R1**: Context-Memory Fabric - How should context be structured and shared for multi-robot VLA coordination?
+- **R1**: Context-Memory Fabric - How should context be structured and shared for multi-robot VLA coordination? A venture for System 3: S3
 - **R2**: Sensor Edge Processing - Can we distribute compute across sensors to lower E2E latency?
 - **R3**: Hardware Co-Design - How to co-design hardware and software targeting μAgent SoC tapeout?
 
@@ -40,9 +40,6 @@ Submodules:
 
 | Path | Repo |
 |------|------|
-| `extern/CogACT` | microsoft/CogACT |
-| `extern/visualnav-transformer` | robodhruv/visualnav-transformer |
-| `extern/CoELA` | UMass-Embodied-AGI/CoELA |
 | `extern/Isaac-GR00T` | NVIDIA/Isaac-GR00T (n1.5 tag) |
 | `extern/Isaac-GR00T-n1.6` | NVIDIA/Isaac-GR00T (main / n1.6) |
 | `extern/IsaacLab` | isaac-sim/IsaacLab |
@@ -179,5 +176,3 @@ Power:
 - [ThreeDWorld (TDW)](https://threedworld.org/) - Physics simulation
 - [Lingua Franca](https://www.lf-lang.org/) - Deterministic coordination
 - [CHASE](https://github.com/chase-cps/core-library) - Contract-based CPS design
-- [CogACT](https://github.com/microsoft/CogACT) - DiT-based manipulation policy (action chunking)
-- [NoMaD / ViNT](https://github.com/robodhruv/visualnav-transformer) - Diffusion-based navigation policy

@@ -1,13 +1,3 @@
-[submodule "extern/CogACT"]
-	path = extern/CogACT
-	url = https://github.com/microsoft/CogACT.git
-
-[submodule "extern/visualnav-transformer"]
-	path = extern/visualnav-transformer
-	url = https://github.com/robodhruv/visualnav-transformer.git
-[submodule "extern/CoELA"]
-	path = extern/CoELA
-	url = https://github.com/UMass-Embodied-AGI/CoELA.git
 [submodule "extern/Isaac-GR00T"]
 	path = extern/Isaac-GR00T
 	url = https://github.com/NVIDIA/Isaac-GR00T.git
