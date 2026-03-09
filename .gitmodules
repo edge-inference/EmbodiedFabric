@@ -15,3 +15,6 @@
 [submodule "extern/lerobot"]
 	path = extern/lerobot
 	url = https://github.com/huggingface/lerobot.git
+[submodule "extern/leisaac"]
+	path = extern/leisaac
+	url = https://github.com/bkubwimana/leisaac.git
