@@ -77,25 +77,7 @@ _VLA_CACHE: Dict[str, VLAInterface] = {}
 
 def _cache_key(model_name: str, kwargs: Dict[str, Any]) -> str:
     """cache key for VLA models."""
-    if model_name == "openvla":
-        quant = kwargs.get("quantization", "4bit")
-        latency = kwargs.get("latency_budget_ms", 100.0)
-        device = kwargs.get("device", "cuda")
-        return f"{model_name}|{quant}|{latency}|{device}"
-    if model_name == "cogact":
-        model_id = kwargs.get("model_id", "CogACT/CogACT-Small")
-        action_model_type = kwargs.get("action_model_type", "DiT-S")
-        return f"{model_name}|{model_id}|{action_model_type}"
-    if model_name == "cogact_server":
-        url = kwargs.get("url", "http://127.0.0.1:5500/act_batch")
-        return f"{model_name}|{url}"
-    if model_name == "nomad":
-        device = kwargs.get("device", "cuda:0")
-        return f"{model_name}|{device}"
-    if model_name == "hierarchical":
-        device = kwargs.get("device", "cuda:0")
-        return f"{model_name}|{device}"
-    if model_name in ("smolvla", "pi0", "groot"):
+    if model_name in ("smolvla", "pi0"):
         model_path = kwargs.get("model_path", "default")
         device = kwargs.get("device", "cuda:0")
         control_mode = kwargs.get("control_mode", "low_level")
@@ -109,35 +91,7 @@ def create_vla(model_name: str, **kwargs) -> VLAInterface:
     if key in _VLA_CACHE:
         return _VLA_CACHE[key]
     
-    if model_name == "openvla":
-        from .openvla import OpenVLAModel
-        _VLA_CACHE[key] = OpenVLAModel(**kwargs)
-    elif model_name == "cogact":
-        from .cogact import CogACTVLA
-        kwargs.pop("quantization", None)
-        _VLA_CACHE[key] = CogACTVLA(**kwargs)
-    elif model_name == "cogact_server":
-        from .cogact_server import CogACTServerClient
-        kwargs.pop("quantization", None)
-        _VLA_CACHE[key] = CogACTServerClient(**kwargs)
-    elif model_name == "trt_openvla":
-        from .trt_openvla import TRTOpenVLAClient
-        _VLA_CACHE[key] = TRTOpenVLAClient(**kwargs)
-    elif model_name == "profiled":
-        from .profiled_vla import ProfiledVLA
-        _VLA_CACHE[key] = ProfiledVLA(**kwargs)
-    elif model_name == "nomad":
-        from .nomad import NoMaDNavigator
-        kwargs.pop("quantization", None)
-        _VLA_CACHE[key] = NoMaDNavigator(**kwargs)
-    elif model_name == "nomad_mock":
-        from .nomad import MockNoMaDNavigator
-        _VLA_CACHE[key] = MockNoMaDNavigator(**kwargs)
-    elif model_name == "hierarchical":
-        from .hierarchical import HierarchicalPlanner
-        kwargs.pop("quantization", None)
-        _VLA_CACHE[key] = HierarchicalPlanner(**kwargs)
-    elif model_name == "smolvla":
+    if model_name == "smolvla":
         from .lerobot_vla import SmolVLAModel
         kwargs.pop("quantization", None)
         _VLA_CACHE[key] = SmolVLAModel(**kwargs)
@@ -145,17 +99,15 @@ def create_vla(model_name: str, **kwargs) -> VLAInterface:
         from .lerobot_vla import Pi0Model
         kwargs.pop("quantization", None)
         _VLA_CACHE[key] = Pi0Model(**kwargs)
-    elif model_name == "groot":
-        from .lerobot_vla import GR00TModel
-        kwargs.pop("quantization", None)
-        _VLA_CACHE[key] = GR00TModel(**kwargs)
     elif model_name == "lerobot_server":
         from .lerobot_vla import LeRobotServerClient
         kwargs.pop("quantization", None)
         _VLA_CACHE[key] = LeRobotServerClient(**kwargs)
+    elif model_name == "profiled":
+        from .profiled_vla import ProfiledVLA
+        _VLA_CACHE[key] = ProfiledVLA(**kwargs)
     else:
         raise ValueError(f"Unknown VLA model: {model_name}. "
-                        f"Options: openvla, cogact, cogact_server, nomad, hierarchical, "
-                        f"smolvla, pi0, groot, lerobot_server, profiled")
+                        f"Options: smolvla, pi0, lerobot_server, profiled")
     
     return _VLA_CACHE[key]

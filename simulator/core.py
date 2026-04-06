@@ -18,7 +18,7 @@ class SimulatorConfig:
     floorplan_layout: Optional[int] = None
     spawn_positions: Optional[List[Tuple[float, float, float]]] = None
     
-    vla_model: str = "openvla"
+    vla_model: str = "smolvla"
     vla_latency_budget_ms: float = 100.0
     vla_quantization: str = "4bit"
     
@@ -42,12 +42,8 @@ class SimulatorConfig:
     recording_resolution: tuple = (1280, 720)
     recording_view: str = "overhead"
 
-    backend: str = "tdw"
+    backend: str = "isaac"
 
-    tdw_launch_build: bool = True                 
-    tdw_address: str = "localhost"                
-    tdw_port: int = 1071                         
-    
     # Debug
     verbose: bool = False                         
 
@@ -82,23 +78,12 @@ class Simulator:
         logger.info(f"Initializing simulator: robots={self.config.n_robots}, "
                    f"vla={self.config.vla_model}, backend={self.config.backend}")
         
-        if self.config.backend == "isaac":
-            from .backend.isaac_backend import IsaacSimBackend
-            self._backend = IsaacSimBackend(
-                self.config,
-                enable_recording=self.config.enable_recording,
-                recording_path=self.config.recording_path
-            )
-        else:
-            from .backend.tdw_backend import TDWBackend
-            self._backend = TDWBackend(
-                self.config,
-                enable_recording=self.config.enable_recording,
-                recording_path=self.config.recording_path,
-                launch_build=self.config.tdw_launch_build,
-                tdw_address=self.config.tdw_address,
-                tdw_port=self.config.tdw_port
-            )
+        from .backend.isaac_backend import IsaacSimBackend
+        self._backend = IsaacSimBackend(
+            self.config,
+            enable_recording=self.config.enable_recording,
+            recording_path=self.config.recording_path
+        )
         
         if not self._backend.initialize():
             logger.error(f"Failed to initialize {self.config.backend} backend")

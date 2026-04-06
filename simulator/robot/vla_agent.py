@@ -17,7 +17,7 @@ class VLAAgent(RobotAgent):
     def __init__(self,
                  robot_id: str,
                  backend,
-                 vla_model: str = "openvla",
+                 vla_model: str = "smolvla",
                  vla_latency_budget_ms: float = 100.0,
                  vla_quantization: str = "4bit",
                  inference_interval: int = 1,

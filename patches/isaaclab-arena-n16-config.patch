@@ -1,0 +1,24 @@
+diff --git a/isaaclab_arena_gr00t/g1_locomanip_n16_config.yaml b/isaaclab_arena_gr00t/g1_locomanip_n16_config.yaml
+new file mode 100644
+index 00000000..aea2a6d7
+--- /dev/null
++++ b/isaaclab_arena_gr00t/g1_locomanip_n16_config.yaml
+@@ -0,0 +1,18 @@
++# GR00T N1.6 config for G1 locomanipulation (PnPAppleToPlate checkpoint).
++# Based on the N1.5 config but pointing to the N1.6 checkpoint.
++# If model loading fails, the N1.6 model class may differ from N1.5.
++model_path: /home/modfi/models/vla_simu/checkpoints/n1.6-g1-pnp-apple
++language_instruction: "Pick up the apple and place it on the plate."
++action_horizon: 16
++embodiment_tag: new_embodiment
++video_backend: decord
++data_config: unitree_g1_sim_wbc
++
++policy_joints_config_path: isaaclab_arena_gr00t/config/g1/gr00t_43dof_joint_space.yaml
++action_joints_config_path: isaaclab_arena_gr00t/config/g1/43dof_joint_space.yaml
++state_joints_config_path: isaaclab_arena_gr00t/config/g1/43dof_joint_space.yaml
++
++action_chunk_length: 16
++pov_cam_name_sim: "robot_head_cam_rgb"
++
++task_mode_name: g1_locomanipulation

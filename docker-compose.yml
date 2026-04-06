@@ -1,36 +1,7 @@
 version: "3.8"
 
 services:
-  # VLM Planner (CogVLM2) - High-level task planning
-  vlm-planner:
-    build:
-      context: .
-      dockerfile: docker/vlm-planner/Dockerfile
-    container_name: vlm-planner
-    ports:
-      - "5600:5600"
-    volumes:
-      - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=${VLM_GPU:-1}
-      - HF_TOKEN=${HF_TOKEN:-}
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ["${VLM_GPU:-1}"]
-              capabilities: [gpu]
-    restart: unless-stopped
-    profiles: ["hierarchical"]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5600/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 180s
-
-  # LeRobot VLA Server (SmolVLA/Pi0/GR00T)
+  # LeRobot VLA Server (SmolVLA/Pi0)
   lerobot:
     build:
       context: .
@@ -41,7 +12,7 @@ services:
     volumes:
       - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
     environment:
-      - NVIDIA_VISIBLE_DEVICES=${LEROBOT_GPU:-2}
+      - NVIDIA_VISIBLE_DEVICES=${LEROBOT_GPU:-0}
       - HF_TOKEN=${HF_TOKEN:-}
       - LEROBOT_MODEL=${LEROBOT_MODEL:-smolvla}
     deploy:
@@ -49,7 +20,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ["${LEROBOT_GPU:-2}"]
+              device_ids: ["${LEROBOT_GPU:-0}"]
               capabilities: [gpu]
     restart: unless-stopped
     profiles: ["lerobot"]
@@ -59,115 +30,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 180s
-
-  cogact:
-    build:
-      context: .
-      dockerfile: docker/cogact-server/Dockerfile
-    container_name: cogact-server
-    ports:
-      - "5500:5500"
-    volumes:
-      - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=${COGACT_GPU:-0}
-      - HF_TOKEN=${HF_TOKEN:-}
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ["${COGACT_GPU:-0}"]
-              capabilities: [gpu]
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5500/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 120s
-
-  # Additional CogACT servers for multi-GPU parallel inference
-  cogact-1:
-    build:
-      context: .
-      dockerfile: docker/cogact-server/Dockerfile
-    container_name: cogact-server-1
-    ports:
-      - "5501:5500"
-    volumes:
-      - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=1
-      - HF_TOKEN=${HF_TOKEN:-}
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ["1"]
-              capabilities: [gpu]
-    restart: unless-stopped
-    profiles: ["multi-gpu"]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5500/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 120s
-
-  cogact-2:
-    build:
-      context: .
-      dockerfile: docker/cogact-server/Dockerfile
-    container_name: cogact-server-2
-    ports:
-      - "5502:5500"
-    volumes:
-      - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=2
-      - HF_TOKEN=${HF_TOKEN:-}
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ["2"]
-              capabilities: [gpu]
-    restart: unless-stopped
-    profiles: ["multi-gpu"]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5500/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 120s
-
-  cogact-3:
-    build:
-      context: .
-      dockerfile: docker/cogact-server/Dockerfile
-    container_name: cogact-server-3
-    ports:
-      - "5503:5500"
-    volumes:
-      - ${HF_HOME:-~/.cache/huggingface}:/root/.cache/huggingface
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=3
-      - HF_TOKEN=${HF_TOKEN:-}
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ["3"]
-              capabilities: [gpu]
-    restart: unless-stopped
-    profiles: ["multi-gpu"]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5500/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 120s

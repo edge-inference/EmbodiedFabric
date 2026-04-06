@@ -1,0 +1,461 @@
+diff --git a/isaaclab_arena/assets/background_library.py b/isaaclab_arena/assets/background_library.py
+index d1277354..30ec44e4 100644
+--- a/isaaclab_arena/assets/background_library.py
++++ b/isaaclab_arena/assets/background_library.py
+@@ -3,12 +3,19 @@
+ #
+ # SPDX-License-Identifier: Apache-2.0
+ 
++import os
++
+ from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
+ 
+ from isaaclab_arena.assets.background import Background
+ from isaaclab_arena.assets.register import register_asset
+ from isaaclab_arena.utils.pose import Pose
+ 
++ISAAC_ASSETS_PATH = os.environ.get(
++    "ISAAC_ASSETS_PATH",
++    os.path.expanduser("~/.local/share/ov/pkg/isaac-sim-5.1.0/isaac-sim-assets"),
++)
++
+ 
+ class LibraryBackground(Background):
+     """
+@@ -116,3 +123,37 @@ class GalileoLocomanipBackground(LibraryBackground):
+ 
+     def __init__(self):
+         super().__init__()
++
++
++@register_asset
++class SimpleWarehouseBackground(LibraryBackground):
++    """Local Isaac Sim warehouse with multiple shelves."""
++
++    name = "simple_warehouse"
++    tags = ["background"]
++    usd_path = (
++        f"{ISAAC_ASSETS_PATH}/Assets/Isaac/5.1/Isaac/Environments"
++        "/Simple_Warehouse/warehouse_multiple_shelves.usd"
++    )
++    initial_pose = Pose(position_xyz=(0.0, 0.0, 0.0), rotation_wxyz=(1.0, 0.0, 0.0, 0.0))
++    object_min_z = 0.0
++
++    def __init__(self):
++        super().__init__()
++
++
++@register_asset
++class FullWarehouseBackground(LibraryBackground):
++    """Local Isaac Sim full warehouse with forklifts."""
++
++    name = "full_warehouse"
++    tags = ["background"]
++    usd_path = (
++        f"{ISAAC_ASSETS_PATH}/Assets/Isaac/5.1/Isaac/Environments"
++        "/Simple_Warehouse/full_warehouse.usd"
++    )
++    initial_pose = Pose(position_xyz=(0.0, 0.0, 0.0), rotation_wxyz=(1.0, 0.0, 0.0, 0.0))
++    object_min_z = 0.0
++
++    def __init__(self):
++        super().__init__()
+diff --git a/isaaclab_arena/examples/example_environments/cli.py b/isaaclab_arena/examples/example_environments/cli.py
+index 3e476bc6..645ddea2 100644
+--- a/isaaclab_arena/examples/example_environments/cli.py
++++ b/isaaclab_arena/examples/example_environments/cli.py
+@@ -19,6 +19,9 @@ from isaaclab_arena.examples.example_environments.kitchen_pick_and_place_environ
+     KitchenPickAndPlaceEnvironment,
+ )
+ from isaaclab_arena.examples.example_environments.press_button_environment import PressButtonEnvironment
++from isaaclab_arena.examples.example_environments.warehouse_pick_and_place_environment import (
++    WarehousePickAndPlaceEnvironment,
++)
+ 
+ # NOTE(alexmillane, 2025.09.04): There is an issue with type annotation in this file.
+ # We cannot annotate types which require the simulation app to be started in order to
+@@ -34,6 +37,7 @@ ExampleEnvironments = {
+     GalileoPickAndPlaceEnvironment.name: GalileoPickAndPlaceEnvironment,
+     GalileoG1LocomanipPickAndPlaceEnvironment.name: GalileoG1LocomanipPickAndPlaceEnvironment,
+     PressButtonEnvironment.name: PressButtonEnvironment,
++    WarehousePickAndPlaceEnvironment.name: WarehousePickAndPlaceEnvironment,
+ }
+ 
+ 
+diff --git a/isaaclab_arena/examples/example_environments/galileo_g1_locomanip_pick_and_place_environment.py b/isaaclab_arena/examples/example_environments/galileo_g1_locomanip_pick_and_place_environment.py
+index be5ab7fa..1b2db37e 100644
+--- a/isaaclab_arena/examples/example_environments/galileo_g1_locomanip_pick_and_place_environment.py
++++ b/isaaclab_arena/examples/example_environments/galileo_g1_locomanip_pick_and_place_environment.py
+@@ -12,6 +12,18 @@ class GalileoG1LocomanipPickAndPlaceEnvironment(ExampleEnvironmentBase):
+ 
+     name: str = "galileo_g1_locomanip_pick_and_place"
+ 
++    @staticmethod
++    def _parse_xyz(raw: str | None, default: tuple[float, float, float]) -> tuple[float, float, float]:
++        if raw is None:
++            return default
++        parts = [item.strip() for item in raw.split(",")]
++        if len(parts) != 3:
++            raise ValueError(f"Expected 3 comma-separated floats for XYZ, received: {raw}")
++        try:
++            return float(parts[0]), float(parts[1]), float(parts[2])
++        except ValueError as exc:
++            raise ValueError(f"Failed to parse XYZ values from: {raw}") from exc
++
+     def get_env(self, args_cli: argparse.Namespace):
+         from isaaclab_arena.environments.isaaclab_arena_environment import IsaacLabArenaEnvironment
+         from isaaclab_arena.scene.scene import Scene
+@@ -28,19 +40,30 @@ class GalileoG1LocomanipPickAndPlaceEnvironment(ExampleEnvironmentBase):
+         else:
+             teleop_device = None
+ 
++        default_pick_up_object_pos = (0.5785, 0.18, 0.0707)
++        default_destination_bin_pos = (-0.2450, -1.6272, -0.2641)
++        default_robot_initial_pos = (0.0, 0.18, 0.0)
++
++        pick_up_object_pos = self._parse_xyz(getattr(args_cli, "pick_up_object_pos", None), default_pick_up_object_pos)
++        destination_bin_pos = self._parse_xyz(
++            getattr(args_cli, "destination_bin_pos", None),
++            default_destination_bin_pos,
++        )
++        robot_initial_pos = self._parse_xyz(getattr(args_cli, "robot_initial_pos", None), default_robot_initial_pos)
++
+         pick_up_object.set_initial_pose(
+             Pose(
+-                position_xyz=(0.5785, 0.18, 0.0707),
++                position_xyz=pick_up_object_pos,
+                 rotation_wxyz=(0.0, 0.0, 1.0, 0.0),
+             )
+         )
+         blue_sorting_bin.set_initial_pose(
+             Pose(
+-                position_xyz=(-0.2450, -1.6272, -0.2641),
++                position_xyz=destination_bin_pos,
+                 rotation_wxyz=(0.0, 0.0, 0.0, 1.0),
+             )
+         )
+-        embodiment.set_initial_pose(Pose(position_xyz=(0.0, 0.18, 0.0), rotation_wxyz=(1.0, 0.0, 0.0, 0.0)))
++        embodiment.set_initial_pose(Pose(position_xyz=robot_initial_pos, rotation_wxyz=(1.0, 0.0, 0.0, 0.0)))
+ 
+         if (
+             args_cli.embodiment == "g1_wbc_pink"
+@@ -79,3 +102,21 @@ class GalileoG1LocomanipPickAndPlaceEnvironment(ExampleEnvironmentBase):
+         parser.add_argument("--object", type=str, default="brown_box")
+         parser.add_argument("--embodiment", type=str, default="g1_wbc_pink")
+         parser.add_argument("--teleop_device", type=str, default=None)
++        parser.add_argument(
++            "--pick_up_object_pos",
++            type=str,
++            default=None,
++            help="Optional object XYZ as comma-separated values, e.g. '0.58,0.18,0.07'.",
++        )
++        parser.add_argument(
++            "--destination_bin_pos",
++            type=str,
++            default=None,
++            help="Optional destination bin XYZ as comma-separated values, e.g. '-0.24,-1.62,-0.26'.",
++        )
++        parser.add_argument(
++            "--robot_initial_pos",
++            type=str,
++            default=None,
++            help="Optional robot base XYZ as comma-separated values, e.g. '0.0,0.18,0.0'.",
++        )
+diff --git a/isaaclab_arena/examples/policy_runner.py b/isaaclab_arena/examples/policy_runner.py
+index ce7365b1..749b389b 100644
+--- a/isaaclab_arena/examples/policy_runner.py
++++ b/isaaclab_arena/examples/policy_runner.py
+@@ -3,6 +3,10 @@
+ #
+ # SPDX-License-Identifier: Apache-2.0
+ 
++import os
++from collections.abc import Callable
++
++import gymnasium as gym
+ import numpy as np
+ import random
+ import torch
+@@ -14,23 +18,71 @@ from isaaclab_arena.examples.policy_runner_cli import create_policy, setup_polic
+ from isaaclab_arena.utils.isaaclab_utils.simulation_app import SimulationAppContext
+ 
+ 
++def _add_video_args(parser) -> None:
++    video_group = parser.add_argument_group("Video Recording", "Arguments for optional mp4 recording")
++    video_group.add_argument("--video", action="store_true", default=False, help="Record videos during evaluation.")
++    video_group.add_argument(
++        "--video_length",
++        type=int,
++        default=3600,
++        help="Length of each recorded video in environment steps.",
++    )
++    video_group.add_argument(
++        "--video_interval",
++        type=int,
++        default=0,
++        help="Step interval between video clips. Use 0 to record only the first clip.",
++    )
++    video_group.add_argument(
++        "--video_folder",
++        type=str,
++        default="logs/videos/policy_runner",
++        help="Output directory for recorded mp4 files.",
++    )
++
++
++def _resolve_step_trigger(video_interval: int) -> Callable[[int], bool]:
++    if video_interval > 0:
++        return lambda step: step % video_interval == 0
++    return lambda step: step == 0
++
++
+ def main():
+     """Script to run an IsaacLab Arena environment with a zero-action agent."""
+     args_parser = get_isaaclab_arena_cli_parser()
++    _add_video_args(args_parser)
+     # We do this as the parser is shared between the example environment and policy runner
+     args_cli, unknown = args_parser.parse_known_args()
++    if args_cli.video:
++        # Video capture requires camera rendering even if user forgot to pass --enable_cameras.
++        args_cli.enable_cameras = True
+ 
+     # Start the simulation app
+     with SimulationAppContext(args_cli):
+         # Add policy-related arguments to the parser
+         args_parser = setup_policy_argument_parser(args_parser)
+         args_cli = args_parser.parse_args()
++        if args_cli.video:
++            args_cli.enable_cameras = True
+         # Build scene
+         arena_builder = get_arena_builder_from_cli(args_cli)
+-        env = arena_builder.make_registered()
++        env_name, env_cfg = arena_builder.build_registered()
++        env = gym.make(env_name, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
++        if args_cli.video:
++            video_folder = os.path.abspath(args_cli.video_folder)
++            os.makedirs(video_folder, exist_ok=True)
++            env = gym.wrappers.RecordVideo(
++                env,
++                video_folder=video_folder,
++                step_trigger=_resolve_step_trigger(args_cli.video_interval),
++                video_length=args_cli.video_length,
++                disable_logger=True,
++            )
++            print(f"[POLICY_RUNNER] Recording enabled. Video output: {video_folder}")
++        env_for_policy = env.unwrapped
+ 
+         if args_cli.seed is not None:
+-            env.seed(args_cli.seed)
++            env_for_policy.seed(args_cli.seed)
+             torch.manual_seed(args_cli.seed)
+             np.random.seed(args_cli.seed)
+             random.seed(args_cli.seed)
+@@ -47,7 +99,7 @@ def main():
+ 
+         for _ in tqdm.tqdm(range(num_steps)):
+             with torch.inference_mode():
+-                actions = policy.get_action(env, obs)
++                actions = policy.get_action(env_for_policy, obs)
+                 obs, _, terminated, truncated, _ = env.step(actions)
+ 
+                 if terminated.any() or truncated.any():
+@@ -59,7 +111,7 @@ def main():
+                     env_ids = (terminated | truncated).nonzero().flatten()
+                     policy.reset(env_ids=env_ids)
+ 
+-        metrics = compute_metrics(env)
++        metrics = compute_metrics(env_for_policy)
+         print(f"Metrics: {metrics}")
+ 
+         # Close the environment.
+diff --git a/isaaclab_arena/examples/policy_runner_cli.py b/isaaclab_arena/examples/policy_runner_cli.py
+index 9103929d..74d49e17 100644
+--- a/isaaclab_arena/examples/policy_runner_cli.py
++++ b/isaaclab_arena/examples/policy_runner_cli.py
+@@ -7,8 +7,6 @@ import argparse
+ 
+ from isaaclab_arena.examples.example_environments.cli import get_isaaclab_arena_example_environment_cli_parser
+ from isaaclab_arena.policy.policy_base import PolicyBase
+-from isaaclab_arena.policy.replay_action_policy import ReplayActionPolicy
+-from isaaclab_arena.policy.zero_action_policy import ZeroActionPolicy
+ 
+ 
+ def add_zero_action_arguments(parser: argparse.ArgumentParser) -> None:
+@@ -115,9 +113,11 @@ def setup_policy_argument_parser(args_parser: argparse.ArgumentParser | None = N
+ def create_policy(args: argparse.Namespace) -> tuple[PolicyBase, int]:
+     """Create the appropriate policy based on the arguments and return (policy, num_steps)."""
+     if args.policy_type == "replay":
++        from isaaclab_arena.policy.replay_action_policy import ReplayActionPolicy
+         policy = ReplayActionPolicy(args.replay_file_path, args.episode_name)
+         num_steps = len(policy)
+     elif args.policy_type == "zero_action":
++        from isaaclab_arena.policy.zero_action_policy import ZeroActionPolicy
+         policy = ZeroActionPolicy()
+         num_steps = args.num_steps
+     elif args.policy_type == "replay_lerobot":
+diff --git a/isaaclab_arena/scripts/teleop.py b/isaaclab_arena/scripts/teleop.py
+index a3b31a57..a28d5fa7 100644
+--- a/isaaclab_arena/scripts/teleop.py
++++ b/isaaclab_arena/scripts/teleop.py
+@@ -73,6 +73,63 @@ from isaaclab_tasks.manager_based.manipulation.lift import mdp
+ if args_cli.enable_pinocchio:
+     import isaaclab_tasks.manager_based.manipulation.pick_place  # noqa: F401
+ 
++PINK_ACTION_DIM = 23
++BASE_HEIGHT_DEFAULT = 0.75
++
++
++def _to_batched_action(action: torch.Tensor, num_envs: int) -> torch.Tensor:
++    if action.dim() == 1:
++        action = action.unsqueeze(0)
++    if action.shape[0] == 1 and num_envs > 1:
++        action = action.repeat(num_envs, 1)
++    return action
++
++
++def _convert_se3_to_g1_pink_action(action: torch.Tensor, env: gym.Env) -> torch.Tensor | None:
++    """Map 7D SE3 keyboard command into 23D G1 Pink action."""
++    expected_dim = env.action_manager.total_action_dim
++    if action.shape[-1] != 7 or expected_dim != PINK_ACTION_DIM:
++        return None
++    if "policy" not in env.obs_buf:
++        return None
++    policy_obs = env.obs_buf["policy"]
++    if "right_wrist_pose_pelvis_frame" not in policy_obs or "left_wrist_pose_pelvis_frame" not in policy_obs:
++        return None
++
++    from isaaclab.utils.math import quat_box_plus, quat_from_matrix
++
++    right_wrist_mat = policy_obs["right_wrist_pose_pelvis_frame"]
++    left_wrist_mat = policy_obs["left_wrist_pose_pelvis_frame"]
++    r_pos = right_wrist_mat[:, :3, 3]
++    l_pos = left_wrist_mat[:, :3, 3]
++    r_quat = quat_from_matrix(right_wrist_mat[:, :3, :3])
++    l_quat = quat_from_matrix(left_wrist_mat[:, :3, :3])
++
++    cmd = action.to(device=r_pos.device, dtype=r_pos.dtype)
++    cmd = _to_batched_action(cmd, r_pos.shape[0])
++
++    pink_action = torch.zeros(r_pos.shape[0], PINK_ACTION_DIM, device=r_pos.device, dtype=r_pos.dtype)
++    pink_action[:, 0] = 0.0
++    pink_action[:, 1] = torch.where(cmd[:, 6] < 0.0, 1.0, 0.0)
++    pink_action[:, 2:5] = l_pos
++    pink_action[:, 5:9] = l_quat
++    pink_action[:, 9:12] = r_pos + cmd[:, 0:3]
++    pink_action[:, 12:16] = quat_box_plus(r_quat, cmd[:, 3:6])
++    pink_action[:, 19] = BASE_HEIGHT_DEFAULT
++    return pink_action
++
++
++def _prepare_actions(action: torch.Tensor, env: gym.Env) -> torch.Tensor:
++    action = _to_batched_action(action, env.num_envs)
++    if action.shape[1] == env.action_manager.total_action_dim:
++        return action
++    converted = _convert_se3_to_g1_pink_action(action, env)
++    if converted is not None:
++        return converted
++    raise ValueError(
++        f"Invalid action shape, expected: {env.action_manager.total_action_dim}, received: {action.shape[1]}."
++    )
++
+ 
+ def main() -> None:
+     """
+@@ -87,9 +144,11 @@ def main() -> None:
+     # parse configuration
+     arena_builder = get_arena_builder_from_cli(args_cli)
+     env_name, env_cfg = arena_builder.build_registered()
++    task_name = getattr(args_cli, "task", env_name)
++    task_name_lower = task_name.lower()
+     # modify configuration
+     env_cfg.terminations.time_out = None
+-    if "Lift" in args_cli.task:
++    if "lift" in task_name_lower:
+         # set the resampling time range to large number to avoid resampling
+         env_cfg.commands.object_pose.resampling_time_range = (1.0e9, 1.0e9)
+         # add termination condition for reaching the goal otherwise the environment won't reset
+@@ -105,9 +164,9 @@ def main() -> None:
+         # create environment
+         env = gym.make(env_name, cfg=env_cfg).unwrapped
+         # check environment name (for reach , we don't allow the gripper)
+-        if "Reach" in args_cli.task:
++        if "reach" in task_name_lower:
+             omni.log.warn(
+-                f"The environment '{args_cli.task}' does not support gripper control. The device command will be"
++                f"The environment '{task_name}' does not support gripper control. The device command will be"
+                 " ignored."
+             )
+     except Exception as e:
+@@ -241,8 +300,7 @@ def main() -> None:
+ 
+                 # Only apply teleop commands when active
+                 if teleoperation_active:
+-                    # process actions
+-                    actions = action.repeat(env.num_envs, 1)
++                    actions = _prepare_actions(action, env)
+                     # apply actions
+                     env.step(actions)
+                 else:
+diff --git a/isaaclab_arena_g1/g1_whole_body_controller/wbc_policy/g1_wbc_upperbody_ik/g1_wbc_upperbody_controller.py b/isaaclab_arena_g1/g1_whole_body_controller/wbc_policy/g1_wbc_upperbody_ik/g1_wbc_upperbody_controller.py
+index 109c223e..3715d5d1 100644
+--- a/isaaclab_arena_g1/g1_whole_body_controller/wbc_policy/g1_wbc_upperbody_ik/g1_wbc_upperbody_controller.py
++++ b/isaaclab_arena_g1/g1_whole_body_controller/wbc_policy/g1_wbc_upperbody_ik/g1_wbc_upperbody_controller.py
+@@ -88,8 +88,30 @@ class G1BodyIKSolver:
+         self.posture_weight = ik_solver_settings.posture_weight
+         self.posture_cost = ik_solver_settings.posture_cost
+         self.posture_lm_damping = ik_solver_settings.posture_lm_damping
++        self.qp_solver = self._select_qp_solver()
+         self.robot = None
+ 
++    @staticmethod
++    def _select_qp_solver() -> str:
++        preferred = ("osqp", "quadprog", "daqp")
++        try:
++            import qpsolvers
++
++            available = set(qpsolvers.available_solvers)
++        except Exception as exc:
++            raise RuntimeError(f"Failed to query qpsolvers backends: {exc}") from exc
++
++        for solver in preferred:
++            if solver in available:
++                if solver != "osqp":
++                    print(f"[G1BodyIKSolver] osqp unavailable; using '{solver}'.")
++                return solver
++
++        raise RuntimeError(
++            "No compatible QP solver found. Install one of: osqp, quadprog, daqp. "
++            f"Available in qpsolvers: {sorted(available)}"
++        )
++
+     def register_robot(self, robot):
+         self.robot = robot
+         self.initialize()
+@@ -175,7 +197,7 @@ class G1BodyIKSolver:
+                 self.configuration,
+                 self.tasks.values(),
+                 dt=self.dt,
+-                solver="osqp",
++                solver=self.qp_solver,
+             )
+             self.configuration.q = self.robot.clip_configuration(
+                 self.configuration.q + velocity * self.dt * self.amplify_factor
+diff --git a/isaaclab_arena_gr00t/g1_locomanip_gr00t_closedloop_config.yaml b/isaaclab_arena_gr00t/g1_locomanip_gr00t_closedloop_config.yaml
+index c48e41df..a04ead70 100644
+--- a/isaaclab_arena_gr00t/g1_locomanip_gr00t_closedloop_config.yaml
++++ b/isaaclab_arena_gr00t/g1_locomanip_gr00t_closedloop_config.yaml
+@@ -5,7 +5,7 @@
+ 
+ # This file shows how to configure the Gr00tClosedloopPolicy class for G1 locomanipulation task
+ # NOTE(alexmillane, 2025-10-31): The model path here aligns with the model used in the static manipulation tutorial.
+-model_path: /models/isaaclab_arena/locomanipulation_tutorial/checkpoint-20000
++model_path: /home/modfi/models/vla_simu/checkpoints/checkpoint-20000
+ language_instruction: "Pick up the brown box from the shelf, and place it into the blue bin on the table located at the right of the shelf."
+ # Action horizon is the number of actions predicted by the policy per inference rollout, defined in the GN1.5 policy data_config 'unitree_g1_sim_wbc'.
+ action_horizon: 16
+@@ -22,3 +22,4 @@ action_chunk_length: 16
+ pov_cam_name_sim: "robot_head_cam_rgb"
+ 
+ task_mode_name: g1_locomanipulation
++policy_device: cuda:1
+\ No newline at end of file

@@ -6,7 +6,6 @@ from .lerobot import (
     VLAControlMode,
     SmolVLAModel,
     Pi0Model,
-    GR00TModel,
     LeRobotServerClient,
 )
 
@@ -16,7 +15,6 @@ __all__ = [
     "VLAControlMode",
     "SmolVLAModel",
     "Pi0Model",
-    "GR00TModel",
     "LeRobotServerClient",
 ]
 

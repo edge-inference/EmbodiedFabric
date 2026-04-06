@@ -60,11 +60,10 @@ Thumbs.db
 # Docker
 .docker/
 
-# NVIDIA/Isaac/TDW
+# NVIDIA/Isaac
 isaac-sim*/
 .nvidia-omniverse/
 .local/share/ov/
-TDWBase/
 
 # Build artifacts
 build/
