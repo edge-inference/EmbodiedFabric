@@ -1,4 +1,8 @@
+# Python
 venv/
+.venv/
+venv*
+.venv*
 __pycache__/
 *.pyc
 *.pyo
@@ -7,78 +11,69 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-
-recordings/
-results/
-backup/
-temp/
-
-.DS_Store
-
-backup/
-.cursor/
-.cursorrules
-testbed.txt
-*.pdf
-
-# Environment files (may contain secrets)
-.env
-*.env.local
-
-# Docker volumes
-.docker/
-
-assets/
-venv*
-.venv*
-
-*AppImage*
-
-# Heavy logs and temp files
-logs/
-tmp/
-
-# Isaac Sim installations and assets
-isaac-sim*/
-.nvidia-omniverse/
-.local/share/ov/
-
-# TDW assets
-TDWBase/
-logs
-*.logs
-*.log
-*.pdf
-data/
-.venv*
-*.env
-venv*
-.vscode/
-.idea/
-.cursor/
-.cursorrules
-testbed.txt
-*.pdf
-data/
-.venv*
-*.env
-venv*
-.vscode/
-.idea/
-.cursor/
-checkpoints/
-logs/
-results/
-outputs/
-wandb/
-.ruff_cache/
-.mypy_cache/
-.pytest_cache/
 .hypothesis/
 .tox/
 .coverage
 .coverage.*
 .cache
-.venv/
-.venv*
-venv*
+
+# Project outputs
+recordings/
+results/
+outputs/
+logs/
+tmp/
+temp/
+backup/
+checkpoints/
+wandb/
+
+# Documentation (generated)
+docs/
+
+# Data files
+data/
+
+# Environment and secrets
+.env
+*.env
+*.env.local
+
+# IDE and editor
+.vscode/
+.idea/
+.cursor/
+.cursorrules
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Heavy binaries
+*.pdf
+*AppImage*
+*.log
+*.logs
+
+# Docker
+.docker/
+
+# NVIDIA/Isaac/TDW
+isaac-sim*/
+.nvidia-omniverse/
+.local/share/ov/
+TDWBase/
+
+# Build artifacts
+build/
+*.o
+*.d
+*.a
+*.so
+*.bin
+
+# Misc
+testbed.txt
+assets/
