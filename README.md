@@ -5,8 +5,8 @@ Simulation framework for hardware-software co-design of embodied AI systems.
 ## Research Problems
 
 - **R1**: Context-Memory Fabric - How should context be structured and shared for multi-robot VLA coordination?
-- **R2**: Sensor Edge Processing - Can we distribute compute across sensors to lower E2E latency?
-- **R3**: Hardware Co-Design - How to co-design hardware and software targeting μAgent SoC tapeout?
+- **R2**: Sensor Edge Processing - When should embodied agents reuse, communicate, or recompute context across sensors, robots, and edge accelerators to meet latency, energy, and reliability constraints?
+- **R3**: Hardware Co-Design - What runtime and architectural mechanisms can enforce these guarantees efficiently, and which functions should be implemented or accelerated in hardware?
 
 ## Architecture
 
