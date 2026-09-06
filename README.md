@@ -1,4 +1,4 @@
-# PhysicAI:
+# EmbodiedFabric:
 
 Simulation framework for hardware-software co-design of embodied AI systems.
 
