@@ -1,0 +1,39 @@
+diff --git a/gr00t/data/schema.py b/gr00t/data/schema.py
+index 6ed7efd..d564a39 100644
+--- a/gr00t/data/schema.py
++++ b/gr00t/data/schema.py
+@@ -16,8 +16,7 @@
+ from enum import Enum
+ from typing import Optional
+ 
+-from numpydantic import NDArray
+-from pydantic import BaseModel, Field, field_serializer
++from pydantic import BaseModel, Field
+ 
+ from .embodiment_tags import EmbodimentTag
+ 
+@@ -171,16 +170,14 @@ class LeRobotModalityMetadata(BaseModel):
+ 
+ 
+ class DatasetStatisticalValues(BaseModel):
+-    max: NDArray = Field(..., description="Maximum values")
+-    min: NDArray = Field(..., description="Minimum values")
+-    mean: NDArray = Field(..., description="Mean values")
+-    std: NDArray = Field(..., description="Standard deviation")
+-    q01: NDArray = Field(..., description="1st percentile values")
+-    q99: NDArray = Field(..., description="99th percentile values")
+-
+-    @field_serializer("*", when_used="json")
+-    def serialize_ndarray(self, v: NDArray) -> list[float]:
+-        return v.tolist()  # type: ignore
++    # Use plain lists instead of numpydantic.NDArray because the Isaac Sim bundled
++    # pydantic version fails to build a schema for numpydantic types.
++    max: list[float] = Field(..., description="Maximum values")
++    min: list[float] = Field(..., description="Minimum values")
++    mean: list[float] = Field(..., description="Mean values")
++    std: list[float] = Field(..., description="Standard deviation")
++    q01: list[float] = Field(..., description="1st percentile values")
++    q99: list[float] = Field(..., description="99th percentile values")
+ 
+ 
+ class DatasetStatistics(BaseModel):

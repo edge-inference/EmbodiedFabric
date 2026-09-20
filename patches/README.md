@@ -3,6 +3,19 @@
 Patches for upstream repos that are not tracked as submodules.
 Apply after cloning the upstream repo at the pinned commit.
 
+## Isaac-GR00T
+
+- **Upstream**: https://github.com/NVIDIA/Isaac-GR00T.git
+- **Pinned commit**: `4af2b622892f7dcb5aae5a3fb70bcb02dc217b96`
+
+Apply `isaac-groot-pydantic-compat.patch` to replace `numpydantic.NDArray`
+schema fields with plain typed lists. This avoids schema-generation failures
+with the Pydantic version bundled by Isaac Sim.
+
+```bash
+git -C extern/Isaac-GR00T apply ../../patches/isaac-groot-pydantic-compat.patch
+```
+
 ## IsaacLab-Arena
 
 - **Upstream**: https://github.com/isaac-sim/IsaacLab-Arena.git

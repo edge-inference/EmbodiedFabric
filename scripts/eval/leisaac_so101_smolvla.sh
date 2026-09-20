@@ -76,6 +76,10 @@ cmd=(
   --device="$DEVICE"
 )
 
+if [[ -n "${SEED:-}" ]]; then
+  cmd+=(--seed="$SEED")
+fi
+
 if [[ "$HEADLESS" == "1" ]]; then
   cmd+=(--headless)
 fi
